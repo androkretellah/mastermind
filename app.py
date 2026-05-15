@@ -38,12 +38,23 @@ game = get_shared_game()
 
 # --- FUNZIONI DI SINCRONIZZAZIONE ---
 def update_shared_config(key):
-    game[key] = st.session_state[f"widget_{key}"]
+    if key == "range_cifre":
+        # Ricostruiamo la tupla prendendo i due widget separati
+        game["range_cifre"] = (st.session_state["widget_min"], st.session_state["widget_max"])
+    else:
+        game[key] = st.session_state[f"widget_{key}"]
 
 def sync_local_session():
     if "ruolo" not in st.session_state:
-        for key in ["modalita", "n_cifre", "range_cifre", "max_tentativi"]:
+        for key in ["modalita", "n_cifre", "max_tentativi"]:
             st.session_state[f"widget_{key}"] = game[key]
+        
+        # Gestione sicura del range per i widget locali
+        current_range = game.get("range_cifre", (1, 9))
+        if not isinstance(current_range, (tuple, list)) or len(current_range) != 2:
+            current_range = (1, 9)
+        st.session_state["widget_min"] = current_range[0]
+        st.session_state["widget_max"] = current_range[1]
 
 sync_local_session()
 
@@ -85,18 +96,34 @@ if "ruolo" not in st.session_state:
         st.subheader("⚙️ Impostazioni")
         st.radio("Modalità:", ["Colori", "Numeri"], key="widget_modalita", on_change=update_shared_config, args=("modalita",), horizontal=True, disabled=impostazioni_bloccate)
         st.slider("Lunghezza sequenza:", 3, 8, key="widget_n_cifre", on_change=update_shared_config, args=("n_cifre",), disabled=impostazioni_bloccate)
-        st.select_slider("Range Valori:", options=list(range(1, 10)), key="widget_range_cifre", on_change=update_shared_config, args=("range_cifre",), disabled=impostazioni_bloccate)
+        
+        st.write("Range Valori:")
+        c_min, c_max = st.columns(2)
+        with c_min:
+            st.selectbox("Minimo", options=list(range(1, 9)), key="widget_min", on_change=update_shared_config, args=("range_cifre",), disabled=impostazioni_bloccate)
+        with c_max:
+            st.selectbox("Massimo", options=list(range(2, 10)), key="widget_max", on_change=update_shared_config, args=("range_cifre",), disabled=impostazioni_bloccate)
+            
         st.number_input("Max tentativi (0=∞):", 0, 50, key="widget_max_tentativi", on_change=update_shared_config, args=("max_tentativi",), disabled=impostazioni_bloccate)
 
     with col_players:
         st.subheader("👥 Ruoli")
-        low, high = game["range_cifre"]
+        
+        # Lettura sicura prima di estrarre low e high
+        current_range = game.get("range_cifre", (1, 9))
+        low = current_range[0] if isinstance(current_range, (tuple, list)) else 1
+        high = current_range[1] if isinstance(current_range, (tuple, list)) else 9
+        
+        config_valida = low < high
+        if not config_valida:
+            st.error("Errore: Il valore Minimo deve essere inferiore al Massimo!")
+            
         c1, c2 = st.columns(2)
-        if c1.button("🟦 GIOCATORE 1", use_container_width=True, disabled=game["p1_preso"] or (low >= high)):
+        if c1.button("🟦 GIOCATORE 1", use_container_width=True, disabled=game["p1_preso"] or not config_valida):
             game["p1_preso"] = True
             st.session_state.ruolo = "Giocatore 1"
             st.rerun()
-        if c2.button("🟥 GIOCATORE 2", use_container_width=True, disabled=game["p2_preso"] or (low >= high)):
+        if c2.button("🟥 GIOCATORE 2", use_container_width=True, disabled=game["p2_preso"] or not config_valida):
             game["p2_preso"] = True
             st.session_state.ruolo = "Giocatore 2"
             st.rerun()
@@ -105,7 +132,12 @@ if "ruolo" not in st.session_state:
 # --- GIOCO ATTIVO ---
 ruolo = st.session_state.ruolo
 n_cifre = game["n_cifre"]
-low, high = game["range_cifre"]
+
+# Lettura sicura del range per la fase di gioco attiva
+current_range = game.get("range_cifre", (1, 9))
+low = current_range[0] if isinstance(current_range, (tuple, list)) else 1
+high = current_range[1] if isinstance(current_range, (tuple, list)) else 9
+
 mia_chiave = game["p1_chiave"] if ruolo == "Giocatore 1" else game["p2_chiave"]
 
 with st.sidebar:
@@ -138,11 +170,13 @@ if mia_chiave is None:
             st.rerun()
     else:
         with st.form("set_num"):
-            k = st.text_input("Codice:", type="password")
+            k = st.text_input(f"Codice ({n_cifre} cifre tra {low} e {high}):", type="password")
             if st.form_submit_button("Conferma") and len(k) == n_cifre:
-                if ruolo == "Giocatore 1": game["p1_chiave"] = k
-                else: game["p2_chiave"] = k
-                st.rerun()
+                if all(c.isdigit() and low <= int(c) <= high for c in k):
+                    if ruolo == "Giocatore 1": game["p1_chiave"] = k
+                    else: game["p2_chiave"] = k
+                    st.rerun()
+                else: st.error(f"Usa solo cifre comprese tra {low} e {high}!")
     st.stop()
 
 # LOOP DI GIOCO
@@ -179,16 +213,18 @@ if game["p1_chiave"] and game["p2_chiave"]:
                 st.rerun()
         else:
             with st.form("num_g"):
-                g = st.text_input("Inserisci:", disabled=not mio_turno)
+                g = st.text_input(f"Inserisci {n_cifre} cifre:", disabled=not mio_turno)
                 if st.form_submit_button("Invia") and len(g) == n_cifre:
-                    target = game["p2_chiave"] if ruolo == "Giocatore 1" else game["p1_chiave"]
-                    res = calcola_feedback(target, g, n_cifre)
-                    if ruolo == "Giocatore 1":
-                        game["p1_mosse"].insert(0, (g, res)); game["turno"] = "Giocatore 2"
-                    else:
-                        game["p2_mosse"].insert(0, (g, res)); game["turno"] = "Giocatore 1"
-                    if res == "V" * n_cifre: game["vincitore"] = ruolo
-                    st.rerun()
+                    if all(c.isdigit() and low <= int(c) <= high for c in g):
+                        target = game["p2_chiave"] if ruolo == "Giocatore 1" else game["p1_chiave"]
+                        res = calcola_feedback(target, g, n_cifre)
+                        if ruolo == "Giocatore 1":
+                            game["p1_mosse"].insert(0, (g, res)); game["turno"] = "Giocatore 2"
+                        else:
+                            game["p2_mosse"].insert(0, (g, res)); game["turno"] = "Giocatore 1"
+                        if res == "V" * n_cifre: game["vincitore"] = ruolo
+                        st.rerun()
+                    else: st.error(f"Usa cifre nel range {low}-{high}!")
 
     with col_stats:
         t1, t2 = st.tabs(["Io", "Avversario"])
