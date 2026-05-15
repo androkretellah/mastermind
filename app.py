@@ -1,6 +1,6 @@
 import streamlit as st
 
-# 1. Database condiviso (Stato del Server)
+# 1. Database condiviso sul server (comune a tutti i dispositivi)
 @st.cache_resource
 def get_shared_game():
     return {
@@ -30,80 +30,108 @@ def calcola_feedback(chiave, tentativo):
                     break
     return ('V' * v) + ('O' * o)
 
-st.set_page_config(page_title="Mastermind 1vs1 Sincrono", layout="wide")
-st.title("⚔️ Mastermind: La Sfida")
+st.set_page_config(page_title="Mastermind Online 1vs1", layout="wide")
 
-# Sidebar per Reset e Info
+# --- SELEZIONE RUOLO (Locale per dispositivo) ---
+if "ruolo" not in st.session_state:
+    st.title("Benvenuto su Mastermind Online")
+    ruolo = st.radio("Chi sei?", ["Seleziona...", "Giocatore 1", "Giocatore 2"])
+    if ruolo != "Seleziona...":
+        st.session_state.ruolo = ruolo
+        st.rerun()
+    st.stop()
+
+ruolo_utente = st.session_state.ruolo
+st.title(f"🕹️ {ruolo_utente} - Mastermind")
+
+# --- SIDEBAR E RESET ---
 with st.sidebar:
-    if st.button("🗑️ Reset Totale Sfida"):
+    st.write(f"Connesso come: **{ruolo_utente}**")
+    if st.button("🗑️ Reset Totale (Per tutti)"):
         for k in game: game[k] = None
         game["p1_mosse"], game["p2_mosse"] = [], []
         game["turno"] = "Giocatore 1"
         st.rerun()
-    st.write("---")
-    st.info("Regole: Impostate le chiavi, poi alternatevi i tentativi. Il primo che arriva a VVVVV vince!")
+    st.info("Nota: Clicca 'Aggiorna' per vedere le mosse dell'avversario.")
 
-# FASE 1: Configurazione Chiavi
+# --- FASE 1: IMPOSTAZIONE CHIAVI ---
 if game["p1_chiave"] is None or game["p2_chiave"] is None:
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Giocatore 1")
-        k1 = st.text_input("Imposta chiave per G2:", type="password", key="set_k1")
-        if st.button("Conferma Chiave G1") and len(k1)==5:
-            game["p1_chiave"] = k1
-            st.success("Chiave G1 salvata!")
-            st.rerun()
-    with col2:
-        st.subheader("Giocatore 2")
-        k2 = st.text_input("Imposta chiave per G1:", type="password", key="set_k2")
-        if st.button("Conferma Chiave G2") and len(k2)==5:
-            game["p2_chiave"] = k2
-            st.success("Chiave G2 salvata!")
-            st.rerun()
+    st.subheader("Configurazione Partita")
+    
+    if ruolo_utente == "Giocatore 1":
+        if game["p1_chiave"] is None:
+            k1 = st.text_input("Imposta la chiave che G2 dovrà indovinare:", type="password")
+            if st.button("Salva Chiave"):
+                if len(k1) == 5:
+                    game["p1_chiave"] = k1
+                    st.rerun()
+        else:
+            st.warning("Hai già impostato la tua chiave. In attesa del Giocatore 2...")
+            
+    elif ruolo_utente == "Giocatore 2":
+        if game["p2_chiave"] is None:
+            k2 = st.text_input("Imposta la chiave che G1 dovrà indovinare:", type="password")
+            if st.button("Salva Chiave"):
+                if len(k2) == 5:
+                    game["p2_chiave"] = k2
+                    st.rerun()
+        else:
+            st.warning("Hai già impostato la tua chiave. In attesa del Giocatore 1...")
+    
+    if st.button("🔄 Controlla se l'altro ha finito"):
+        st.rerun()
     st.stop()
 
-# FASE 2: Gioco Sincrono
+# --- FASE 2: GIOCO ---
 if game["vincitore"]:
-    st.balloons()
-    st.success(f"🏆 IL VINCITORE È {game['vincitore']}!")
-else:
-    st.subheader(f"C'est le tour de: **{game['turno']}**")
+    st.success(f"🏆 LA PARTITA È FINITA! VINCITORE: {game['vincitore']}")
+    if st.button("Nuova Partita"):
+        # Reset locale e globale
+        del st.session_state.ruolo
+        st.rerun()
 
-col_g1, col_g2 = st.columns(2)
+col_gioco, col_info = st.columns([2, 1])
 
-# --- GIOCATORE 1 ---
-with col_g1:
-    st.markdown("### 🟦 Giocatore 1")
-    st.caption("Obiettivo: Indovinare la chiave di G2")
-    if game["turno"] == "Giocatore 1" and not game["vincitore"]:
-        with st.form("form_g1", clear_on_submit=True):
-            t1 = st.text_input("Tuo tentativo:")
-            if st.form_submit_button("Invia") and len(t1)==5:
-                res = calcola_feedback(game["p2_chiave"], t1)
-                game["p1_mosse"].insert(0, (t1, res))
-                if res == "VVVVV": game["vincitore"] = "Giocatore 1"
-                game["turno"] = "Giocatore 2"
-                st.rerun()
+with col_gioco:
+    st.subheader(f"Turno attuale: **{game['turno']}**")
     
-    for m, r in game["p1_mosse"]:
-        st.text(f"{m} -> {r}")
-
-# --- GIOCATORE 2 ---
-with col_g2:
-    st.markdown("### 🟥 Giocatore 2")
-    st.caption("Obiettivo: Indovinare la chiave di G1")
-    if game["turno"] == "Giocatore 2" and not game["vincitore"]:
-        with st.form("form_g2", clear_on_submit=True):
-            t2 = st.text_input("Tuo tentativo:")
-            if st.form_submit_button("Invia") and len(t2)==5:
-                res = calcola_feedback(game["p1_chiave"], t2)
-                game["p2_mosse"].insert(0, (t2, res))
-                if res == "VVVVV": game["vincitore"] = "Giocatore 2"
-                game["turno"] = "Giocatore 1"
-                st.rerun()
+    # Logica di input basata sul turno e sul ruolo
+    es_mio_turno = (ruolo_utente == game["turno"])
     
-    for m, r in game["p2_mosse"]:
-        st.text(f"{m} -> {r}")
+    with st.form("mossa_form"):
+        tentativo = st.text_input("Tuo tentativo (5 cifre):", disabled=not es_mio_turno)
+        invia = st.form_submit_button("Invia Mossa", disabled=not es_mio_turno)
+        
+        if invia and es_mio_turno:
+            if len(tentativo) == 5:
+                # Se sono G1, provo a indovinare la chiave di G2
+                target = game["p2_chiave"] if ruolo_utente == "Giocatore 1" else game["p1_chiave"]
+                res = calcola_feedback(target, tentativo)
+                
+                if ruolo_utente == "Giocatore 1":
+                    game["p1_mosse"].insert(0, (tentativo, res))
+                    game["turno"] = "Giocatore 2"
+                else:
+                    game["p2_mosse"].insert(0, (tentativo, res))
+                    game["turno"] = "Giocatore 1"
+                
+                if res == "VVVVV":
+                    game["vincitore"] = ruolo_utente
+                st.rerun()
 
-if st.button("🔄 Aggiorna Schermo"):
-    st.rerun()
+with col_info:
+    if st.button("🔄 AGGIORNA TABELLONE"):
+        st.rerun()
+    
+    st.markdown("### Cronologia")
+    tab1, tab2 = st.tabs(["Mie Mosse", "Mosse Avversario"])
+    
+    mie_mosse = game["p1_mosse"] if ruolo_utente == "Giocatore 1" else game["p2_mosse"]
+    avv_mosse = game["p2_mosse"] if ruolo_utente == "Giocatore 1" else game["p1_mosse"]
+    
+    with tab1:
+        for m, r in mie_mosse:
+            st.code(f"{m} -> {r}")
+    with tab2:
+        for m, r in avv_mosse:
+            st.code(f"{m} -> {r}")
