@@ -5,7 +5,6 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="Mastermind Pro 1-9", layout="wide")
 st_autorefresh(interval=2000, key="global_refresh")
 
-# Mappa colori pulita: 9 colori netti (1-9)
 COLOR_MAP = {
     "1": "🔴", "2": "🔵", "3": "🟢", "4": "🟡", 
     "5": "🟣", "6": "🟠", "7": "🟤", "8": "⚫", 
@@ -45,7 +44,16 @@ def calcola_feedback(chiave, tentativo, n_cifre):
 def reset_game():
     for k in ["p1_chiave", "p2_chiave", "vincitore"]: game[k] = None
     game.update({"p1_mosse": [], "p2_mosse": [], "turno": "Giocatore 1", "p1_preso": False, "p2_preso": False})
-    st.rerun()
+
+# --- CONTROLLO SINCRONIZZAZIONE DISCONNESSI ---
+# Se un giocatore ha forzato il reset globale tornando alla lobby, l'altro viene buttato fuori
+if "ruolo" in st.session_state:
+    if st.session_state.ruolo == "Giocatore 1" and not game["p1_preso"]:
+        del st.session_state.ruolo
+        st.rerun()
+    elif st.session_state.ruolo == "Giocatore 2" and not game["p2_preso"]:
+        del st.session_state.ruolo
+        st.rerun()
 
 # --- LOBBY UNIFICATA ---
 if "ruolo" not in st.session_state:
@@ -61,7 +69,6 @@ if "ruolo" not in st.session_state:
         game["n_cifre"] = st.slider("Lunghezza sequenza:", 3, 8, game["n_cifre"], disabled=impostazioni_bloccate)
         
         st.write("Intervallo cifre/colori consentiti:")
-        # Slider per il range (Solo 1-9)
         r_min, r_max = st.select_slider(
             "Seleziona Min e Max:",
             options=list(range(1, 10)),
@@ -89,24 +96,36 @@ if "ruolo" not in st.session_state:
             st.rerun()
     st.stop()
 
-# --- GIOCO ---
+# --- GIOCO ATTIVO ---
 ruolo = st.session_state.ruolo
 n_cifre = game["n_cifre"]
 low, high = game["range_cifre"]
 
 with st.sidebar:
-    st.write(f"Sei: **{ruolo}**")
-    if st.button("⬅️ Cambia Ruolo"):
-        if ruolo == "Giocatore 1": game["p1_preso"] = False
-        else: game["p2_preso"] = False
+    st.title(f"🎮 {ruolo}")
+    
+    # Se esco io, resetto totalmente la stanza per far uscire anche l'altro giocatore
+    if st.button("⬅️ Cambia Ruolo / Esci"):
+        reset_game()
         del st.session_state.ruolo
         st.rerun()
+        
     st.divider()
-    if st.button("🗑️ Reset Totale"): reset_game()
+    if st.button("🗑️ Reset Totale"): 
+        reset_game()
+        st.rerun()
+    st.divider()
+    
+    # SPUNTA DI CONTROLLO CHIAVE (RIPRISTINATA)
+    mia_chiave = game["p1_chiave"] if ruolo == "Giocatore 1" else game["p2_chiave"]
+    if mia_chiave:
+        if st.checkbox("👁️ Mostra mia chiave"):
+            if game["modalita"] == "Colori":
+                st.info("".join([COLOR_MAP[c] for c in mia_chiave]))
+            else:
+                st.info(f"Chiave: {mia_chiave}")
 
 # --- FASE IMPOSTAZIONE CHIAVE ---
-mia_chiave = game["p1_chiave"] if ruolo == "Giocatore 1" else game["p2_chiave"]
-
 if mia_chiave is None:
     st.subheader(f"Imposta la tua chiave segreta ({n_cifre} posizioni)")
     if "temp_key" not in st.session_state: st.session_state.temp_key = ""
@@ -142,7 +161,9 @@ if mia_chiave is None:
 if game["p1_chiave"] and game["p2_chiave"]:
     if game["vincitore"]:
         st.success(f"🏆 IL VINCITORE È {game['vincitore']}!")
-        if st.button("Ricomincia"): reset_game()
+        if st.button("Ricomincia (Nuova Partita)"): 
+            reset_game()
+            st.rerun()
         st.stop()
 
     col_gioco, col_stats = st.columns([1, 1])
@@ -202,4 +223,4 @@ if game["p1_chiave"] and game["p2_chiave"]:
             for m, r in avv:
                 st.write(f"Mossa avversario: `{r}`")
 else:
-    st.info("Configurate le chiavi per iniziare.")
+    st.info("In attesa che entrambi i giocatori impostino la propria chiave...")
