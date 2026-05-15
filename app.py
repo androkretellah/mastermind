@@ -5,22 +5,8 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="Mastermind Pro 1-9", layout="wide")
 st_autorefresh(interval=1500, key="global_refresh")
 
-# CSS CORRETTO: Nasconde SOLO le icone dei link, senza bloccare i click sulla pagina
-st.markdown("""
-    <style>
-    /* Nasconde l'icona a catena (anchor) dei titoli */
-    .header-anchor {
-        display: none !important;
-    }
-    /* Rimuove l'area invisibile che bloccava i click */
-    h1 a, h2 a, h3 a, h4 a {
-        pointer-events: none !important;
-        cursor: default !important;
-        text-decoration: none !important;
-        color: inherit !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# CSS ELIMINATO - Solo una piccola stringa per pulire i margini se necessario
+st.markdown("<style>div.block-container{padding-top:2rem;}</style>", unsafe_allow_html=True)
 
 COLOR_MAP = {
     "1": "🔴", "2": "🔵", "3": "🟢", "4": "🟡", 
@@ -41,7 +27,6 @@ def get_shared_game():
 
 game = get_shared_game()
 
-# --- FUNZIONI DI SINCRONIZZAZIONE ---
 def update_shared_config(key):
     if key == "range_cifre":
         game["range_cifre"] = (st.session_state["widget_min"], st.session_state["widget_max"])
@@ -53,7 +38,6 @@ def sync_local_session():
         for key in ["modalita", "n_cifre", "max_tentativi"]:
             st.session_state[f"widget_{key}"] = game.get(key)
         
-        # CONTROLLO DI SICUREZZA RESILIENTE: Evita il crash se rng non è una tupla valida
         rng = game.get("range_cifre", (1, 9))
         if not isinstance(rng, (tuple, list)) or len(rng) != 2:
             rng = (1, 9)
@@ -85,22 +69,14 @@ def reset_game():
     game.update({"p1_mosse": [], "p2_mosse": [], "turno": "Giocatore 1", "p1_preso": False, "p2_preso": False})
     st.rerun()
 
-# --- LOGICA DISCONNESSIONE ---
-if "ruolo" in st.session_state:
-    if (st.session_state.ruolo == "Giocatore 1" and not game["p1_preso"]) or \
-       (st.session_state.ruolo == "Giocatore 2" and not game["p2_preso"]):
-        del st.session_state.ruolo
-        st.rerun()
-
 # --- LOBBY ---
 if "ruolo" not in st.session_state:
-    st.title("🕵️ Mastermind Lobby")
+    st.markdown("<h1>🕵️ Mastermind Lobby</h1>", unsafe_allow_html=True)
     pronto = game["p1_preso"] or game["p2_preso"]
-    
     col_cfg, col_players = st.columns([1, 1])
     
     with col_cfg:
-        st.subheader("⚙️ Regole")
+        st.markdown("<h3>⚙️ Regole</h3>", unsafe_allow_html=True)
         st.radio("Modalità", ["Colori", "Numeri"], key="widget_modalita", on_change=update_shared_config, args=("modalita",), horizontal=True, disabled=pronto)
         st.slider("Cifre", 3, 8, key="widget_n_cifre", on_change=update_shared_config, args=("n_cifre",), disabled=pronto)
         
@@ -112,16 +88,10 @@ if "ruolo" not in st.session_state:
             st.selectbox("Max", options=list(range(2, 10)), key="widget_max", on_change=update_shared_config, args=("range_cifre",), disabled=pronto)
 
     with col_players:
-        st.subheader("👥 Ruoli")
-        
-        # Lettura sicura del range
+        st.markdown("<h3>👥 Ruoli</h3>", unsafe_allow_html=True)
         rng = game.get("range_cifre", (1, 9))
-        if not isinstance(rng, (tuple, list)) or len(rng) != 2:
-            rng = (1, 9)
-        low, high = rng[0], rng[1]
-        
+        low, high = (rng[0], rng[1]) if isinstance(rng, (tuple, list)) else (1, 9)
         valido = low < high
-        if not valido: st.error("Min deve essere < Max")
         
         c1, c2 = st.columns(2)
         if c1.button("🟦 GIOCATORE 1", use_container_width=True, disabled=game["p1_preso"] or not valido):
@@ -137,17 +107,12 @@ if "ruolo" not in st.session_state:
 # --- GIOCO ATTIVO ---
 ruolo = st.session_state.ruolo
 n_cifre = game["n_cifre"]
-
-# Lettura protetta anche nel gioco attivo
 rng = game.get("range_cifre", (1, 9))
-if not isinstance(rng, (tuple, list)) or len(rng) != 2:
-    rng = (1, 9)
-low, high = rng[0], rng[1]
-
+low, high = (rng[0], rng[1]) if isinstance(rng, (tuple, list)) else (1, 9)
 mia_chiave = game["p1_chiave"] if ruolo == "Giocatore 1" else game["p2_chiave"]
 
 with st.sidebar:
-    st.title(ruolo)
+    st.markdown(f"<h2>{ruolo}</h2>", unsafe_allow_html=True)
     if st.button("⬅️ Esci"):
         reset_game()
         del st.session_state.ruolo
@@ -157,7 +122,7 @@ with st.sidebar:
 
 # IMPOSTAZIONE CHIAVE
 if mia_chiave is None:
-    st.subheader(f"Crea il tuo codice ({n_cifre} posizioni)")
+    st.markdown(f"<h3>Crea il tuo codice ({n_cifre} posizioni)</h3>", unsafe_allow_html=True)
     if "temp_key" not in st.session_state: st.session_state.temp_key = ""
     
     if game["modalita"] == "Colori":
@@ -166,12 +131,13 @@ if mia_chiave is None:
             if btn_cols[i].button(COLOR_MAP[str(v)], key=f"k_{v}"):
                 if len(st.session_state.temp_key) < n_cifre: st.session_state.temp_key += str(v)
         st.write("Selezione:", "".join([COLOR_MAP[c] for c in st.session_state.temp_key]))
-        if st.button("Conferma ✅") and len(st.session_state.temp_key) == n_cifre:
+        c1, c2 = st.columns(2)
+        if c1.button("Conferma ✅") and len(st.session_state.temp_key) == n_cifre:
             if ruolo == "Giocatore 1": game["p1_chiave"] = st.session_state.temp_key
             else: game["p2_chiave"] = st.session_state.temp_key
             st.session_state.temp_key = ""
             st.rerun()
-        if st.button("Cancella ❌"): st.session_state.temp_key = ""
+        if c2.button("Cancella ❌"): st.session_state.temp_key = ""
     else:
         with st.form("num_key"):
             k = st.text_input("Codice:", type="password")
@@ -192,7 +158,7 @@ if game["p1_chiave"] and game["p2_chiave"]:
     turno_mio = (game["turno"] == ruolo)
 
     with col_sx:
-        st.subheader(f"Turno: {game['turno']}")
+        st.markdown(f"<h3>Turno: {game['turno']}</h3>", unsafe_allow_html=True)
         if "current_guess" not in st.session_state: st.session_state.current_guess = ""
         
         if game["modalita"] == "Colori":
@@ -233,6 +199,6 @@ if game["p1_chiave"] and game["p2_chiave"]:
                 m_txt = "".join([COLOR_MAP[c] for c in m]) if game["modalita"] == "Colori" else m
                 st.write(f"{m_txt} -> `{r}`")
         with t2:
-            for m, r in avv: st.write(f"Esito: `{r}`")
+            for m, r in avv: st.write(f"Esito avversario: `{r}`")
 else:
-    st.info("In attesa delle chiavi...")
+    st.info("In attesa che entrambi i giocatori impostino la chiave...")
