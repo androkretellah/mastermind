@@ -1,7 +1,7 @@
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
-# 1. Configurazione
+# 1. Configurazione Iniziale Rigida
 st.set_page_config(page_title="Mastermind Pro", layout="wide")
 st_autorefresh(interval=1500, key="global_refresh")
 
@@ -24,6 +24,10 @@ def get_shared_game():
 
 game = get_shared_game()
 
+# Forza lo stato della sessione locale a sincronizzarsi
+if "ruolo" not in st.session_state:
+    st.session_state.ruolo = None
+
 def reset_game():
     game.update({
         "p1_chiave": None, "p2_chiave": None,
@@ -31,8 +35,7 @@ def reset_game():
         "turno": "Giocatore 1", "vincitore": None,
         "p1_preso": False, "p2_preso": False
     })
-    if "ruolo" in st.session_state: 
-        del st.session_state.ruolo
+    st.session_state.ruolo = None
     st.rerun()
 
 def calcola_feedback(chiave, tentativo, n_cifre):
@@ -51,23 +54,14 @@ def calcola_feedback(chiave, tentativo, n_cifre):
                     break
     return ("✅" * v) + ("⭕" * o)
 
-# --- FUNZIONI CALLBACK PER INGRESSO IMMEDIATO ---
-def entra_giocatore_1():
-    game["p1_preso"] = True
-    st.session_state.ruolo = "Giocatore 1"
-
-def entra_giocatore_2():
-    game["p2_preso"] = True
-    st.session_state.ruolo = "Giocatore 2"
-
-# --- CONTROLLO DISCONNESSIONE ---
-if "ruolo" in st.session_state:
+# --- CONTROLLO DISCONNESSIONE AUTO-SINCRO ---
+if st.session_state.ruolo is not None:
     if not game["p1_preso"] or not game["p2_preso"]:
-        del st.session_state.ruolo
+        st.session_state.ruolo = None
         st.rerun()
 
 # --- LOBBY ---
-if "ruolo" not in st.session_state:
+if st.session_state.ruolo is None:
     st.title("🕵️ Mastermind Multiplayer")
     
     col_cfg, col_p = st.columns(2)
@@ -88,37 +82,44 @@ if "ruolo" not in st.session_state:
                 game["modalita"] = mod
                 game["range_cifre"] = (v_min, v_max)
                 st.success("Regole aggiornate!")
+                st.rerun()
             else:
                 st.error("Il Min deve essere minore del Max")
 
     with col_p:
         st.subheader("👥 Partecipa alla Stanza")
         
-        # Gestione Tasto Unico con on_click nativo di Streamlit
+        # Determina il ruolo disponibile a livello di codice sequenziale statico
         if not game["p1_preso"]:
-            st.button(
-                "🎮 ENTRA IN PARTITA (Sarai Giocatore 1)", 
-                on_click=entra_giocatore_1, 
-                use_container_width=True, 
-                type="primary"
-            )
+            testo_bottone = "🎮 ENTRA IN PARTITA (Sarai Giocatore 1)"
+            ruolo_futuro = "Giocatore 1"
+            disabilitato = False
         elif not game["p2_preso"]:
-            st.button(
-                "🎮 ENTRA IN PARTITA (Sarai Giocatore 2)", 
-                on_click=entra_giocatore_2, 
-                use_container_width=True, 
-                type="primary"
-            )
+            testo_bottone = "🎮 ENTRA IN PARTITA (Sarai Giocatore 2)"
+            ruolo_futuro = "Giocatore 2"
+            disabilitato = False
         else:
-            st.button("🚫 STANZA PIENA", disabled=True, use_container_width=True)
+            testo_bottone = "🚫 STANZA PIENA"
+            ruolo_futuro = None
+            disabilitato = True
+
+        # Un Form garantisce che l'azione del pulsante non venga persa o ignorata dal websocket
+        with st.form("form_ingresso"):
+            st.write(f"Slot 1: {'🟢 Libero' if not game['p1_preso'] else '🔴 Occupato'}")
+            st.write(f"Slot 2: {'🟢 Libero' if not game['p2_preso'] else '🔴 Occupato'}")
+            click_entra = st.form_submit_button(testo_bottone, disabled=disabilitato, use_container_width=True, type="primary")
             
-        st.write("")
-        st.write(f"Stato Slot 1: {'🟢 Libero' if not game['p1_preso'] else '🔴 Occupato'}")
-        st.write(f"Stato Slot 2: {'🟢 Libero' if not game['p2_preso'] else '🔴 Occupato'}")
-        
+            if click_entra and ruolo_futuro:
+                if ruolo_futuro == "Giocatore 1":
+                    game["p1_preso"] = True
+                    st.session_state.ruolo = "Giocatore 1"
+                elif ruolo_futuro == "Giocatore 2":
+                    game["p2_preso"] = True
+                    st.session_state.ruolo = "Giocatore 2"
+                st.rerun()
     st.stop()
 
-# --- GIOCO ATTIVO ---
+# --- GIOCO ATTIVO (Eseguito solo se st.session_state.ruolo è impostato) ---
 ruolo = st.session_state.ruolo
 n_cifre = game["n_cifre"]
 low, high = game["range_cifre"]
@@ -145,6 +146,7 @@ if mia_chiave is None:
         if cols[i].button(label, key=f"set_{val}"):
             if len(st.session_state.temp_key) < n_cifre:
                 st.session_state.temp_key += str(val)
+                st.rerun()
     
     visual_key = "".join([COLOR_MAP[c] if game["modalita"]=="Colori" else c for c in st.session_state.temp_key])
     st.subheader(f"Selezione: {visual_key}")
@@ -155,10 +157,12 @@ if mia_chiave is None:
         else: game["p2_chiave"] = st.session_state.temp_key
         st.session_state.temp_key = ""
         st.rerun()
-    if c2.button("Cancella ❌"): st.session_state.temp_key = ""
+    if c2.button("Cancella ❌"): 
+        st.session_state.temp_key = ""
+        st.rerun()
     st.stop()
 
-# 2. Match
+# 2. Match Attivo
 if game["p1_chiave"] and game["p2_chiave"]:
     if game["vincitore"]:
         st.success(f"🏆 VINCITORE: {game['vincitore']}!")
@@ -179,6 +183,7 @@ if game["p1_chiave"] and game["p2_chiave"]:
             if g_cols[i].button(label, key=f"g_{val}", disabled=not mio_turno):
                 if len(st.session_state.temp_guess) < n_cifre:
                     st.session_state.temp_guess += str(val)
+                    st.rerun()
         
         visual_guess = "".join([COLOR_MAP[c] if game["modalita"]=="Colori" else c for c in st.session_state.temp_guess])
         st.write(f"Tentativo attuale: **{visual_guess}**")
@@ -198,7 +203,9 @@ if game["p1_chiave"] and game["p2_chiave"]:
             if res == "✅" * n_cifre: game["vincitore"] = ruolo
             st.session_state.temp_guess = ""
             st.rerun()
-        if b2.button("Svuota 🗑️", disabled=not mio_turno): st.session_state.temp_guess = ""
+        if b2.button("Svuota 🗑️", disabled=not mio_turno): 
+            st.session_state.temp_guess = ""
+            st.rerun()
 
     with col_hist:
         t1, t2 = st.tabs(["I miei tentativi", "Avversario"])
