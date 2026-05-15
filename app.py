@@ -5,10 +5,11 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="Mastermind Pro Ultimate", layout="wide")
 st_autorefresh(interval=2000, key="global_refresh")
 
+# Mappa colori aggiornata (9 ora è un cerchio marrone/bronzo 🤎)
 COLOR_MAP = {
     "0": "🔴", "1": "🔵", "2": "🟢", "3": "🟡", 
     "4": "🟣", "5": "🟠", "6": "🟤", "7": "⚫", 
-    "8": "⚪", "9": "🎨"
+    "8": "⚪", "9": "🤎"
 }
 
 @st.cache_resource
@@ -49,7 +50,6 @@ def reset_game():
 if "ruolo" not in st.session_state:
     st.title("🕵️ Mastermind Online: Lobby")
     
-    # Se qualcuno ha già preso un ruolo, le impostazioni sono bloccate
     impostazioni_bloccate = game["p1_preso"] or game["p2_preso"]
     
     col_cfg, col_players = st.columns([1, 1], gap="large")
@@ -58,30 +58,43 @@ if "ruolo" not in st.session_state:
         st.subheader("⚙️ Regole della Sfida")
         game["modalita"] = st.radio("Modalità:", ["Colori", "Numeri"], horizontal=True, disabled=impostazioni_bloccate)
         game["n_cifre"] = st.slider("Lunghezza sequenza:", 3, 8, game["n_cifre"], disabled=impostazioni_bloccate)
-        low, high = game["range_cifre"]
-        c1, c2 = st.columns(2)
-        new_low = c1.number_input("Cifra min:", 0, 8, low, disabled=impostazioni_bloccate)
-        new_high = c2.number_input("Cifra max:", new_low + 1, 9, high, disabled=impostazioni_bloccate)
-        game["range_cifre"] = (new_low, new_high)
+        
+        st.write("Intervallo cifre/colori consentiti:")
+        # Uso di uno slider a doppio cursore per evitare il bug del min > max
+        r_min, r_max = st.select_slider(
+            "Seleziona Min e Max:",
+            options=list(range(10)),
+            value=game["range_cifre"],
+            disabled=impostazioni_bloccate
+        )
+        game["range_cifre"] = (r_min, r_max)
+        
         game["max_tentativi"] = st.number_input("Max tentativi (0=∞):", 0, 50, game["max_tentativi"], disabled=impostazioni_bloccate)
         
         if impostazioni_bloccate:
-            st.warning("Impostazioni bloccate: partita in fase di avvio.")
+            st.warning("Impostazioni bloccate: partita in corso.")
 
     with col_players:
         st.subheader("👥 Scegli il tuo Ruolo")
         c1, c2 = st.columns(2)
-        if c1.button("🟦 GIOCATORE 1", use_container_width=True, disabled=game["p1_preso"]):
+        
+        # Validazione finale prima di permettere l'ingresso
+        config_valida = r_min < r_max
+        
+        if not config_valida:
+            st.error("Errore: Il valore minimo deve essere inferiore al massimo!")
+        
+        btn_g1 = c1.button("🟦 GIOCATORE 1", use_container_width=True, disabled=game["p1_preso"] or not config_valida)
+        btn_g2 = c2.button("🟥 GIOCATORE 2", use_container_width=True, disabled=game["p2_preso"] or not config_valida)
+        
+        if btn_g1:
             game["p1_preso"] = True
             st.session_state.ruolo = "Giocatore 1"
             st.rerun()
-        if c2.button("🟥 GIOCATORE 2", use_container_width=True, disabled=game["p2_preso"]):
+        if btn_g2:
             game["p2_preso"] = True
             st.session_state.ruolo = "Giocatore 2"
             st.rerun()
-        
-        if not game["p1_preso"] and not game["p2_preso"]:
-            st.info("Configurate le regole, poi selezionate il giocatore.")
     st.stop()
 
 # --- GIOCO ATTIVO ---
@@ -103,12 +116,10 @@ with st.sidebar:
 mia_chiave = game["p1_chiave"] if ruolo == "Giocatore 1" else game["p2_chiave"]
 
 if mia_chiave is None:
-    st.subheader(f"Configura la tua chiave segreta ({n_cifre} posizioni)")
-    
+    st.subheader(f"Imposta la tua chiave segreta ({n_cifre} posizioni)")
     if "temp_key" not in st.session_state: st.session_state.temp_key = ""
     
     if game["modalita"] == "Colori":
-        # Tastierino per inserimento chiave
         cols = st.columns(high - low + 1)
         for i, val in enumerate(range(low, high + 1)):
             if cols[i].button(COLOR_MAP[str(val)], key=f"key_set_{val}"):
@@ -126,11 +137,13 @@ if mia_chiave is None:
             st.rerun()
     else:
         with st.form("set_numeric_key"):
-            k = st.text_input("Inserisci cifre:", type="password", max_chars=n_cifre)
+            k = st.text_input(f"Digita {n_cifre} cifre (range {low}-{high}):", type="password", max_chars=n_cifre)
             if st.form_submit_button("Conferma") and len(k) == n_cifre:
-                if ruolo == "Giocatore 1": game["p1_chiave"] = k
-                else: game["p2_chiave"] = k
-                st.rerun()
+                if all(low <= int(c) <= high for c in k):
+                    if ruolo == "Giocatore 1": game["p1_chiave"] = k
+                    else: game["p2_chiave"] = k
+                    st.rerun()
+                else: st.error(f"Usa solo cifre tra {low} e {high}")
     st.stop()
 
 # --- FASE DI GIOCO ---
@@ -148,7 +161,7 @@ if game["p1_chiave"] and game["p2_chiave"]:
         if "current_guess" not in st.session_state: st.session_state.current_guess = ""
         
         if game["modalita"] == "Colori":
-            st.write("Componi il tuo tentativo:")
+            st.write("Tastierino colori:")
             btn_cols = st.columns(high - low + 1)
             for i, val in enumerate(range(low, high + 1)):
                 if btn_cols[i].button(COLOR_MAP[str(val)], key=f"btn_g_{val}", disabled=not mio_turno):
@@ -163,26 +176,26 @@ if game["p1_chiave"] and game["p2_chiave"]:
                 target = game["p2_chiave"] if ruolo == "Giocatore 1" else game["p1_chiave"]
                 res = calcola_feedback(target, st.session_state.current_guess, n_cifre)
                 if ruolo == "Giocatore 1":
-                    game["p1_mosse"].insert(0, (st.session_state.current_guess, res))
-                    game["turno"] = "Giocatore 2"
+                    game["p1_mosse"].insert(0, (st.session_state.current_guess, res)); game["turno"] = "Giocatore 2"
                 else:
-                    game["p2_mosse"].insert(0, (st.session_state.current_guess, res))
-                    game["turno"] = "Giocatore 1"
+                    game["p2_mosse"].insert(0, (st.session_state.current_guess, res)); game["turno"] = "Giocatore 1"
                 if res == "V" * n_cifre: game["vincitore"] = ruolo
                 st.session_state.current_guess = ""
                 st.rerun()
         else:
             with st.form("num_guess", clear_on_submit=True):
-                g = st.text_input("Inserisci mossa:", max_chars=n_cifre, disabled=not mio_turno)
+                g = st.text_input(f"Inserisci {n_cifre} cifre:", max_chars=n_cifre, disabled=not mio_turno)
                 if st.form_submit_button("Invia") and len(g) == n_cifre:
-                    target = game["p2_chiave"] if ruolo == "Giocatore 1" else game["p1_chiave"]
-                    res = calcola_feedback(target, g, n_cifre)
-                    if ruolo == "Giocatore 1":
-                        game["p1_mosse"].insert(0, (g, res)); game["turno"] = "Giocatore 2"
-                    else:
-                        game["p2_mosse"].insert(0, (g, res)); game["turno"] = "Giocatore 1"
-                    if res == "V" * n_cifre: game["vincitore"] = ruolo
-                    st.rerun()
+                    if all(low <= int(c) <= high for c in g):
+                        target = game["p2_chiave"] if ruolo == "Giocatore 1" else game["p1_chiave"]
+                        res = calcola_feedback(target, g, n_cifre)
+                        if ruolo == "Giocatore 1":
+                            game["p1_mosse"].insert(0, (g, res)); game["turno"] = "Giocatore 2"
+                        else:
+                            game["p2_mosse"].insert(0, (g, res)); game["turno"] = "Giocatore 1"
+                        if res == "V" * n_cifre: game["vincitore"] = ruolo
+                        st.rerun()
+                    else: st.error(f"Usa solo cifre tra {low} e {high}")
 
     with col_stats:
         t1, t2 = st.tabs(["Mie Mosse", "Avversario"])
