@@ -2,10 +2,9 @@ import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
 # 1. Configurazione Iniziale
-st.set_page_config(page_title="Mastermind Ultimate 1vs1", layout="wide")
-st_autorefresh(interval=3000, key="datarefresh")
+st.set_page_config(page_title="Mastermind Pro Ultimate", layout="wide")
+st_autorefresh(interval=2000, key="global_refresh")
 
-# Mappa colori per la modalità grafica
 COLOR_MAP = {
     "0": "🔴", "1": "🔵", "2": "🟢", "3": "🟡", 
     "4": "🟣", "5": "🟠", "6": "🟤", "7": "⚫", 
@@ -18,11 +17,9 @@ def get_shared_game():
         "p1_chiave": None, "p2_chiave": None,
         "p1_mosse": [], "p2_mosse": [],
         "turno": "Giocatore 1", "vincitore": None,
-        "configurato": False,
-        "n_cifre": 5,
-        "max_tentativi": 0, # Default Infinito
-        "range_cifre": (0, 9),
-        "modalita": "Numeri" # "Numeri" o "Colori"
+        "n_cifre": 4, "max_tentativi": 0,
+        "range_cifre": (0, 5), "modalita": "Colori",
+        "p1_preso": False, "p2_preso": False
     }
 
 game = get_shared_game()
@@ -43,137 +40,161 @@ def calcola_feedback(chiave, tentativo, n_cifre):
                     break
     return ('V' * v) + ('O' * o)
 
-def reset_totale():
+def reset_game():
     for k in ["p1_chiave", "p2_chiave", "vincitore"]: game[k] = None
-    game["p1_mosse"], game["p2_mosse"] = [], []
-    game["turno"] = "Giocatore 1"
-    game["configurato"] = False
+    game.update({"p1_mosse": [], "p2_mosse": [], "turno": "Giocatore 1", "p1_preso": False, "p2_preso": False})
     st.rerun()
 
-# --- 1. CONFIGURAZIONE AVANZATA ---
-if not game["configurato"]:
-    st.markdown("<h1 style='text-align: center;'>⚙️ Impostazioni Sfida</h1>", unsafe_allow_html=True)
-    col_a, col_b, col_c = st.columns([1, 2, 1])
-    
-    with col_b:
-        with st.container(border=True):
-            mod = st.radio("Modalità di gioco:", ["Numeri", "Colori"], horizontal=True)
-            n_cifre = st.slider("Lunghezza sequenza:", 3, 8, 5)
-            
-            c1, c2 = st.columns(2)
-            with c1:
-                start_digit = st.number_input("Cifra minima:", 0, 9, 0)
-            with c2:
-                end_digit = st.number_input("Cifra massima:", start_digit + 1, 9, 9)
-            
-            max_t = st.number_input("Tentativi massimi (0 = infiniti):", min_value=0, value=0)
-            
-            if st.button("🚀 INIZIA SFIDA", use_container_width=True):
-                game.update({
-                    "n_cifre": n_cifre, "max_tentativi": max_t,
-                    "range_cifre": (start_digit, end_digit),
-                    "modalita": mod, "configurato": True
-                })
-                st.rerun()
-    st.stop()
-
-# --- 2. SELEZIONE GIOCATORE ---
+# --- SCHERMATA INIZIALE UNIFICATA ---
 if "ruolo" not in st.session_state:
-    st.markdown("<h1 style='text-align: center;'>🕵️ Mastermind Online</h1>", unsafe_allow_html=True)
-    c_a, c_b, c_c = st.columns([1, 2, 1])
-    with c_b:
+    st.title("🕵️ Mastermind Online: Lobby")
+    
+    # Se qualcuno ha già preso un ruolo, le impostazioni sono bloccate
+    impostazioni_bloccate = game["p1_preso"] or game["p2_preso"]
+    
+    col_cfg, col_players = st.columns([1, 1], gap="large")
+    
+    with col_cfg:
+        st.subheader("⚙️ Regole della Sfida")
+        game["modalita"] = st.radio("Modalità:", ["Colori", "Numeri"], horizontal=True, disabled=impostazioni_bloccate)
+        game["n_cifre"] = st.slider("Lunghezza sequenza:", 3, 8, game["n_cifre"], disabled=impostazioni_bloccate)
+        low, high = game["range_cifre"]
         c1, c2 = st.columns(2)
-        if c1.button("🟦 GIOCATORE 1", use_container_width=True):
+        new_low = c1.number_input("Cifra min:", 0, 8, low, disabled=impostazioni_bloccate)
+        new_high = c2.number_input("Cifra max:", new_low + 1, 9, high, disabled=impostazioni_bloccate)
+        game["range_cifre"] = (new_low, new_high)
+        game["max_tentativi"] = st.number_input("Max tentativi (0=∞):", 0, 50, game["max_tentativi"], disabled=impostazioni_bloccate)
+        
+        if impostazioni_bloccate:
+            st.warning("Impostazioni bloccate: partita in fase di avvio.")
+
+    with col_players:
+        st.subheader("👥 Scegli il tuo Ruolo")
+        c1, c2 = st.columns(2)
+        if c1.button("🟦 GIOCATORE 1", use_container_width=True, disabled=game["p1_preso"]):
+            game["p1_preso"] = True
             st.session_state.ruolo = "Giocatore 1"
             st.rerun()
-        if c2.button("🟥 GIOCATORE 2", use_container_width=True):
+        if c2.button("🟥 GIOCATORE 2", use_container_width=True, disabled=game["p2_preso"]):
+            game["p2_preso"] = True
             st.session_state.ruolo = "Giocatore 2"
             st.rerun()
+        
+        if not game["p1_preso"] and not game["p2_preso"]:
+            st.info("Configurate le regole, poi selezionate il giocatore.")
     st.stop()
 
-ruolo_utente = st.session_state.ruolo
+# --- GIOCO ATTIVO ---
+ruolo = st.session_state.ruolo
+n_cifre = game["n_cifre"]
 low, high = game["range_cifre"]
 
-# --- SIDEBAR ---
 with st.sidebar:
-    st.title(ruolo_utente)
-    if st.button("⬅️ Esci"):
+    st.write(f"Sei: **{ruolo}**")
+    if st.button("⬅️ Abbandona Ruolo"):
+        if ruolo == "Giocatore 1": game["p1_preso"] = False
+        else: game["p2_preso"] = False
         del st.session_state.ruolo
         st.rerun()
     st.divider()
-    st.write(f"Modo: **{game['modalita']}**")
-    st.write(f"Cifre: **{game['n_cifre']}** (da {low} a {high})")
-    if st.button("🗑️ Reset Totale"): reset_totale()
+    if st.button("🗑️ Reset Totale"): reset_game()
+
+# --- FASE IMPOSTAZIONE CHIAVE ---
+mia_chiave = game["p1_chiave"] if ruolo == "Giocatore 1" else game["p2_chiave"]
+
+if mia_chiave is None:
+    st.subheader(f"Configura la tua chiave segreta ({n_cifre} posizioni)")
     
-    mia_k = game["p1_chiave"] if ruolo_utente == "Giocatore 1" else game["p2_chiave"]
-    if mia_k and st.checkbox("👁️ Mostra mia chiave"):
-        if game["modalita"] == "Colori":
-            st.write("".join([COLOR_MAP[c] for c in mia_k]))
-        else:
-            st.info(f"Chiave: {mia_k}")
-
-# --- 3. IMPOSTAZIONE CHIAVI ---
-if game["p1_chiave"] is None or game["p2_chiave"] is None:
-    deve_impostare = (ruolo_utente == "Giocatore 1" and game["p1_chiave"] is None) or \
-                     (ruolo_utente == "Giocatore 2" and game["p2_chiave"] is None)
-    if deve_impostare:
-        with st.form("set_k"):
-            st.subheader("Imposta la tua chiave")
-            st.caption(f"Usa cifre da {low} a {high}")
-            if game["modalita"] == "Colori":
-                st.info("💡 Associa i numeri ai colori: " + " ".join([f"{i}:{COLOR_MAP[str(i)]}" for i in range(low, high+1)]))
-            k_in = st.text_input("Chiave:", type="password", max_chars=game["n_cifre"])
-            if st.form_submit_button("Conferma"):
-                if len(k_in) == game["n_cifre"] and all(low <= int(c) <= high for c in k_in if c.isdigit()):
-                    if ruolo_utente == "Giocatore 1": game["p1_chiave"] = k_in
-                    else: game["p2_chiave"] = k_in
-                    st.rerun()
-                else: st.error(f"Inserisci {game['n_cifre']} cifre nell'intervallo {low}-{high}!")
-    else: st.warning("In attesa dell'avversario...")
-    st.stop()
-
-# --- 4. GIOCO ---
-if game["vincitore"]:
-    st.header(f"🏆 Vincitore: {game['vincitore']}!")
-    if st.button("Nuova Partita"): reset_totale()
-    st.stop()
-
-mie_mosse = game["p1_mosse"] if ruolo_utente == "Giocatore 1" else game["p2_mosse"]
-avv_mosse = game["p2_mosse"] if ruolo_utente == "Giocatore 1" else game["p1_mosse"]
-
-col_in, col_viz = st.columns([1, 2])
-
-with col_in:
-    st.subheader(f"Turno: {game['turno']}")
-    mio_turno = (ruolo_utente == game["turno"])
+    if "temp_key" not in st.session_state: st.session_state.temp_key = ""
     
-    with st.form("mossa", clear_on_submit=True):
-        st.write(f"Inserisci {game['n_cifre']} cifre ({low}-{high})")
-        if game["modalita"] == "Colori":
-            cols = st.columns(len(range(low, high+1)))
-            for idx, val in enumerate(range(low, high+1)):
-                cols[idx % len(cols)].write(f"{val}:{COLOR_MAP[str(val)]}")
+    if game["modalita"] == "Colori":
+        # Tastierino per inserimento chiave
+        cols = st.columns(high - low + 1)
+        for i, val in enumerate(range(low, high + 1)):
+            if cols[i].button(COLOR_MAP[str(val)], key=f"key_set_{val}"):
+                if len(st.session_state.temp_key) < n_cifre:
+                    st.session_state.temp_key += str(val)
         
-        guess = st.text_input("Tuo tentativo:", max_chars=game["n_cifre"], disabled=not mio_turno)
-        if st.form_submit_button("INVIA", disabled=not mio_turno):
-            if len(guess) == game["n_cifre"] and all(low <= int(c) <= high for c in guess if c.isdigit()):
-                target = game["p2_chiave"] if ruolo_utente == "Giocatore 1" else game["p1_chiave"]
-                res = calcola_feedback(target, guess, game["n_cifre"])
-                if ruolo_utente == "Giocatore 1":
-                    game["p1_mosse"].insert(0, (guess, res)); game["turno"] = "Giocatore 2"
-                else:
-                    game["p2_mosse"].insert(0, (guess, res)); game["turno"] = "Giocatore 1"
-                if res == "V" * game["n_cifre"]: game["vincitore"] = ruolo_utente
+        st.markdown(f"### Selezione: {' '.join([COLOR_MAP[c] for c in st.session_state.temp_key])}")
+        
+        c1, c2 = st.columns(2)
+        if c1.button("❌ Cancella"): st.session_state.temp_key = ""
+        if c2.button("✅ Conferma Chiave") and len(st.session_state.temp_key) == n_cifre:
+            if ruolo == "Giocatore 1": game["p1_chiave"] = st.session_state.temp_key
+            else: game["p2_chiave"] = st.session_state.temp_key
+            st.session_state.temp_key = ""
+            st.rerun()
+    else:
+        with st.form("set_numeric_key"):
+            k = st.text_input("Inserisci cifre:", type="password", max_chars=n_cifre)
+            if st.form_submit_button("Conferma") and len(k) == n_cifre:
+                if ruolo == "Giocatore 1": game["p1_chiave"] = k
+                else: game["p2_chiave"] = k
                 st.rerun()
+    st.stop()
 
-with col_viz:
-    t1, t2 = st.tabs(["I MIEI TENTATIVI", "AVVERSARIO"])
-    def display_mossa(m):
+# --- FASE DI GIOCO ---
+if game["p1_chiave"] and game["p2_chiave"]:
+    if game["vincitore"]:
+        st.success(f"🏆 IL VINCITORE È {game['vincitore']}!")
+        if st.button("Ricomincia"): reset_game()
+        st.stop()
+
+    col_gioco, col_stats = st.columns([1, 1])
+    mio_turno = (game["turno"] == ruolo)
+
+    with col_gioco:
+        st.subheader(f"Turno: {game['turno']}")
+        if "current_guess" not in st.session_state: st.session_state.current_guess = ""
+        
         if game["modalita"] == "Colori":
-            return "".join([COLOR_MAP[c] for c in m])
-        return m
+            st.write("Componi il tuo tentativo:")
+            btn_cols = st.columns(high - low + 1)
+            for i, val in enumerate(range(low, high + 1)):
+                if btn_cols[i].button(COLOR_MAP[str(val)], key=f"btn_g_{val}", disabled=not mio_turno):
+                    if len(st.session_state.current_guess) < n_cifre:
+                        st.session_state.current_guess += str(val)
+            
+            st.markdown(f"### Tentativo: {' '.join([COLOR_MAP[c] for c in st.session_state.current_guess])}")
+            
+            c1, c2 = st.columns(2)
+            if c1.button("🗑️ Reset", disabled=not mio_turno): st.session_state.current_guess = ""
+            if c2.button("🚀 INVIA", use_container_width=True, disabled=not (mio_turno and len(st.session_state.current_guess) == n_cifre)):
+                target = game["p2_chiave"] if ruolo == "Giocatore 1" else game["p1_chiave"]
+                res = calcola_feedback(target, st.session_state.current_guess, n_cifre)
+                if ruolo == "Giocatore 1":
+                    game["p1_mosse"].insert(0, (st.session_state.current_guess, res))
+                    game["turno"] = "Giocatore 2"
+                else:
+                    game["p2_mosse"].insert(0, (st.session_state.current_guess, res))
+                    game["turno"] = "Giocatore 1"
+                if res == "V" * n_cifre: game["vincitore"] = ruolo
+                st.session_state.current_guess = ""
+                st.rerun()
+        else:
+            with st.form("num_guess", clear_on_submit=True):
+                g = st.text_input("Inserisci mossa:", max_chars=n_cifre, disabled=not mio_turno)
+                if st.form_submit_button("Invia") and len(g) == n_cifre:
+                    target = game["p2_chiave"] if ruolo == "Giocatore 1" else game["p1_chiave"]
+                    res = calcola_feedback(target, g, n_cifre)
+                    if ruolo == "Giocatore 1":
+                        game["p1_mosse"].insert(0, (g, res)); game["turno"] = "Giocatore 2"
+                    else:
+                        game["p2_mosse"].insert(0, (g, res)); game["turno"] = "Giocatore 1"
+                    if res == "V" * n_cifre: game["vincitore"] = ruolo
+                    st.rerun()
 
-    with t1:
-        for m, r in mie_mosse: st.markdown(f"### {display_mossa(m)}  →  `{r}`")
-    with t2:
-        for m, r in avv_mosse: st.write(f"Feedback avversario: `{r}`")
+    with col_stats:
+        t1, t2 = st.tabs(["Mie Mosse", "Avversario"])
+        mie = game["p1_mosse"] if ruolo == "Giocatore 1" else game["p2_mosse"]
+        avv = game["p2_mosse"] if ruolo == "Giocatore 1" else game["p1_mosse"]
+        
+        with t1:
+            for m, r in mie:
+                m_str = "".join([COLOR_MAP[c] for c in m]) if game["modalita"] == "Colori" else m
+                st.markdown(f"#### {m_str} ➔ `{r}`")
+        with t2:
+            for m, r in avv:
+                st.write(f"Mossa avversario: `{r}`")
+else:
+    st.info("In attesa che entrambi i giocatori impostino la propria chiave...")
