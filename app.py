@@ -5,19 +5,19 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="Mastermind Pro 1-9", layout="wide")
 st_autorefresh(interval=1500, key="global_refresh")
 
-# CSS CORRETTO: Nasconde le icone link senza bloccare i click
+# CSS CORRETTO: Nasconde SOLO le icone dei link, senza bloccare i click sulla pagina
 st.markdown("""
     <style>
-    /* Nasconde l'icona del link (catena) accanto ai titoli */
+    /* Nasconde l'icona a catena (anchor) dei titoli */
     .header-anchor {
         display: none !important;
     }
-    /* Impedisce che lo spazio dell'icona intercetti i click */
-    [data-testid="stHeaderActionElements"] {
-        display: none !important;
-    }
-    h1 a, h2 a, h3 a {
-        display: none !important;
+    /* Rimuove l'area invisibile che bloccava i click */
+    h1 a, h2 a, h3 a, h4 a {
+        pointer-events: none !important;
+        cursor: default !important;
+        text-decoration: none !important;
+        color: inherit !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -53,7 +53,12 @@ def sync_local_session():
         for key in ["modalita", "n_cifre", "max_tentativi"]:
             st.session_state[f"widget_{key}"] = game.get(key)
         
+        # CONTROLLO DI SICUREZZA RESILIENTE: Evita il crash se rng non è una tupla valida
         rng = game.get("range_cifre", (1, 9))
+        if not isinstance(rng, (tuple, list)) or len(rng) != 2:
+            rng = (1, 9)
+            game["range_cifre"] = rng
+            
         st.session_state["widget_min"] = rng[0]
         st.session_state["widget_max"] = rng[1]
 
@@ -108,7 +113,13 @@ if "ruolo" not in st.session_state:
 
     with col_players:
         st.subheader("👥 Ruoli")
-        low, high = game["range_cifre"]
+        
+        # Lettura sicura del range
+        rng = game.get("range_cifre", (1, 9))
+        if not isinstance(rng, (tuple, list)) or len(rng) != 2:
+            rng = (1, 9)
+        low, high = rng[0], rng[1]
+        
         valido = low < high
         if not valido: st.error("Min deve essere < Max")
         
@@ -126,7 +137,13 @@ if "ruolo" not in st.session_state:
 # --- GIOCO ATTIVO ---
 ruolo = st.session_state.ruolo
 n_cifre = game["n_cifre"]
-low, high = game["range_cifre"]
+
+# Lettura protetta anche nel gioco attivo
+rng = game.get("range_cifre", (1, 9))
+if not isinstance(rng, (tuple, list)) or len(rng) != 2:
+    rng = (1, 9)
+low, high = rng[0], rng[1]
+
 mia_chiave = game["p1_chiave"] if ruolo == "Giocatore 1" else game["p2_chiave"]
 
 with st.sidebar:
