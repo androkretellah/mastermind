@@ -4,7 +4,7 @@ from streamlit_autorefresh import st_autorefresh
 # 1. Configurazione Iniziale
 st.set_page_config(page_title="Mastermind Pro 1vs1", layout="wide")
 
-# Auto-refresh ogni 3 secondi per sincronizzare i due giocatori
+# Auto-refresh ogni 3 secondi
 st_autorefresh(interval=3000, key="datarefresh")
 
 @st.cache_resource
@@ -52,7 +52,15 @@ ruolo_utente = st.session_state.ruolo
 # --- SIDEBAR ---
 with st.sidebar:
     st.markdown(f"Stai giocando come:<br><h2>{ruolo_utente}</h2>", unsafe_allow_html=True)
-    if st.button("🗑️ Reset Partita"):
+    
+    # NUOVO TASTO: TORNA ALLA SCELTA GIOCATORE
+    if st.button("⬅️ Cambia Giocatore", use_container_width=True):
+        del st.session_state.ruolo
+        st.rerun()
+        
+    st.divider()
+    
+    if st.button("🗑️ Reset Totale Partita", use_container_width=True, help="Cancella chiavi e mosse per TUTTI"):
         for k in game: game[k] = None
         game["p1_mosse"], game["p2_mosse"] = [], []
         game["turno"] = "Giocatore 1"
@@ -60,24 +68,21 @@ with st.sidebar:
     
     st.divider()
     
-    # PULSANTE PER MOSTRARE LA PROPRIA CHIAVE
     mia_chiave_impostata = game["p1_chiave"] if ruolo_utente == "Giocatore 1" else game["p2_chiave"]
     if mia_chiave_impostata:
         if st.checkbox("👁️ Mostra la mia chiave"):
-            st.info(f"La tua chiave segreta è: **{mia_chiave_impostata}**")
+            st.info(f"La tua chiave: **{mia_chiave_impostata}**")
 
-# --- FASE 1: SETTING CHIAVI (Con supporto INVIO) ---
+# --- FASE 1: SETTING CHIAVI ---
 if game["p1_chiave"] is None or game["p2_chiave"] is None:
     st.info("Configurazione chiavi in corso...")
     
-    # Verifichiamo se l'utente attuale deve ancora impostare la chiave
     deve_impostare = (ruolo_utente == "Giocatore 1" and game["p1_chiave"] is None) or \
                      (ruolo_utente == "Giocatore 2" and game["p2_chiave"] is None)
 
     if deve_impostare:
         with st.form("form_chiave", clear_on_submit=True):
             st.subheader("Imposta la tua chiave")
-            st.write("L'avversario dovrà indovinare questa sequenza.")
             k_input = st.text_input("Inserisci 5 cifre e premi INVIO:", type="password", max_chars=5)
             submit_k = st.form_submit_button("Conferma Chiave")
             
@@ -87,10 +92,9 @@ if game["p1_chiave"] is None or game["p2_chiave"] is None:
                     else: game["p2_chiave"] = k_input
                     st.rerun()
                 else:
-                    st.error("Inserisci esattamente 5 cifre numeriche.")
+                    st.error("Inserisci 5 cifre numeriche.")
     else:
-        st.warning("Hai già impostato la tua chiave. In attesa dell'avversario...")
-        if st.button("🔄 Controlla se è pronto"): st.rerun()
+        st.warning("In attesa dell'avversario...")
     st.stop()
 
 # --- FASE 2: GIOCO ---
@@ -100,8 +104,10 @@ if game["vincitore"]:
         st.success("🎉 HAI VINTO!")
     else:
         st.error(f"💀 HAI PERSO! Il {game['vincitore']} ha vinto.")
-    if st.button("Torna alla Selezione"):
-        del st.session_state.ruolo
+    if st.button("Nuova Partita (Reset Totale)"):
+        for k in game: game[k] = None
+        game["p1_mosse"], game["p2_mosse"] = [], []
+        game["turno"] = "Giocatore 1"
         st.rerun()
     st.stop()
 
@@ -118,7 +124,6 @@ with col_input:
         
         if submit and mio_turno:
             if len(tentativo) == 5 and tentativo.isdigit():
-                # Bersaglio incrociato
                 target = game["p2_chiave"] if ruolo_utente == "Giocatore 1" else game["p1_chiave"]
                 res = calcola_feedback(target, tentativo)
                 
