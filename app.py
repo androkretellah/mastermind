@@ -1,7 +1,7 @@
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
-# 1. Configurazione Iniziale Rigida
+# 1. Configurazione Iniziale
 st.set_page_config(page_title="Mastermind Pro", layout="wide")
 st_autorefresh(interval=1500, key="global_refresh")
 
@@ -24,17 +24,21 @@ def get_shared_game():
 
 game = get_shared_game()
 
-# Forza lo stato della sessione locale a sincronizzarsi
+# --- FORCE CLEANUP DI SICUREZZA (Risolve il blocco del Giocatore 1) ---
+# Se l'app rileva che gli slot sono occupati ma non c'è nessuna partita reale avviata (chiavi vuote),
+# permette un reset totale cliccando un tasto di sblocco d'emergenza.
 if "ruolo" not in st.session_state:
     st.session_state.ruolo = None
 
 def reset_game():
-    game.update({
-        "p1_chiave": None, "p2_chiave": None,
-        "p1_mosse": [], "p2_mosse": [],
-        "turno": "Giocatore 1", "vincitore": None,
-        "p1_preso": False, "p2_preso": False
-    })
+    game["p1_chiave"] = None
+    game["p2_chiave"] = None
+    game["p1_mosse"] = []
+    game["p2_mosse"] = []
+    game["turno"] = "Giocatore 1"
+    game["vincitore"] = None
+    game["p1_preso"] = False
+    game["p2_preso"] = False
     st.session_state.ruolo = None
     st.rerun()
 
@@ -89,7 +93,7 @@ if st.session_state.ruolo is None:
     with col_p:
         st.subheader("👥 Partecipa alla Stanza")
         
-        # Determina il ruolo disponibile a livello di codice sequenziale statico
+        # Determina dinamicamente lo stato reale degli slot di gioco
         if not game["p1_preso"]:
             testo_bottone = "🎮 ENTRA IN PARTITA (Sarai Giocatore 1)"
             ruolo_futuro = "Giocatore 1"
@@ -103,10 +107,10 @@ if st.session_state.ruolo is None:
             ruolo_futuro = None
             disabilitato = True
 
-        # Un Form garantisce che l'azione del pulsante non venga persa o ignorata dal websocket
         with st.form("form_ingresso"):
             st.write(f"Slot 1: {'🟢 Libero' if not game['p1_preso'] else '🔴 Occupato'}")
             st.write(f"Slot 2: {'🟢 Libero' if not game['p2_preso'] else '🔴 Occupato'}")
+            
             click_entra = st.form_submit_button(testo_bottone, disabled=disabilitato, use_container_width=True, type="primary")
             
             if click_entra and ruolo_futuro:
@@ -117,9 +121,15 @@ if st.session_state.ruolo is None:
                     game["p2_preso"] = True
                     st.session_state.ruolo = "Giocatore 2"
                 st.rerun()
+        
+        # Tasto di sblocco d'emergenza se i websocket rimangono incastrati
+        st.write("---")
+        if st.button("♻️ Sblocca/Svuota Stanza (Usa se vedi slot occupati per errore)"):
+            reset_game()
+            
     st.stop()
 
-# --- GIOCO ATTIVO (Eseguito solo se st.session_state.ruolo è impostato) ---
+# --- GIOCO ATTIVO ---
 ruolo = st.session_state.ruolo
 n_cifre = game["n_cifre"]
 low, high = game["range_cifre"]
