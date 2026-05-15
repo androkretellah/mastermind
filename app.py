@@ -1,83 +1,109 @@
 import streamlit as st
 
-# 1. Database condiviso tra tutti gli utenti del server
+# 1. Database condiviso (Stato del Server)
 @st.cache_resource
-def get_shared_state():
+def get_shared_game():
     return {
-        "chiave": None,
-        "cronologia": [],
-        "turno": 0  # Per gestire l'alternanza (opzionale)
+        "p1_chiave": None,
+        "p2_chiave": None,
+        "p1_mosse": [],
+        "p2_mosse": [],
+        "turno": "Giocatore 1",
+        "vincitore": None
     }
 
-shared = get_shared_state()
+game = get_shared_game()
 
 def calcola_feedback(chiave, tentativo):
-    usato_chiave = [False] * 5
-    usato_tentativo = [False] * 5
-    v_count = 0
-    o_count = 0
+    usato_chiave, usato_tentativo = [False]*5, [False]*5
+    v, o = 0, 0
     for i in range(5):
         if tentativo[i] == chiave[i]:
-            v_count += 1
-            usato_chiave[i] = True
-            usato_tentativo[i] = True
+            v += 1
+            usato_chiave[i] = usato_tentativo[i] = True
     for i in range(5):
         if not usato_tentativo[i]:
             for j in range(5):
                 if not usato_chiave[j] and tentativo[i] == chiave[j]:
-                    o_count += 1
+                    o += 1
                     usato_chiave[j] = True
                     break
-    return ('V' * v_count) + ('O' * o_count)
+    return ('V' * v) + ('O' * o)
 
-st.set_page_config(page_title="Mastermind Sincrono", page_icon="👥")
-st.title("👥 Mastermind Sincrono")
+st.set_page_config(page_title="Mastermind 1vs1 Sincrono", layout="wide")
+st.title("⚔️ Mastermind: La Sfida")
 
-# --- LOGICA DI RESET ---
-if st.sidebar.button("🗑️ Reset Totale Partita"):
-    shared["chiave"] = None
-    shared["cronologia"] = []
-    st.rerun()
-
-# --- FASE 1: IMPOSTAZIONE CHIAVE ---
-if shared["chiave"] is None:
-    st.subheader("Configurazione Partita")
-    st.write("Uno dei due giocatori inserisca la chiave segreta.")
-    nuova_chiave = st.text_input("Inserisci chiave (5 cifre):", type="password")
-    if st.button("Conferma Chiave"):
-        if len(nuova_chiave) == 5 and nuova_chiave.isdigit():
-            shared["chiave"] = nuova_chiave
-            st.rerun()
-        else:
-            st.error("Deve essere di 5 cifre!")
-
-# --- FASE 2: GIOCO SINCRONO ---
-else:
-    st.success("Partita in corso! Entrambi vedete gli stessi tentativi.")
-    
-    # Form per l'inserimento
-    with st.form(key='sync_form', clear_on_submit=True):
-        tentativo = st.text_input("Inserisci il tuo tentativo:")
-        submit = st.form_submit_button("Invia Mossa")
-
-    if submit:
-        if len(tentativo) == 5 and tentativo.isdigit():
-            risultato = calcola_feedback(shared["chiave"], tentativo)
-            # Aggiungiamo alla lista condivisa
-            shared["cronologia"].insert(0, f"Mossa: {tentativo} -> Feedback: {risultato}")
-            if risultato == "VVVVV":
-                st.balloons()
-            st.rerun() # Forza l'aggiornamento per l'altro utente
-        else:
-            st.error("Inserisci 5 cifre.")
-
-    # Visualizzazione Cronologia Condivisa
-    st.subheader("Tabellone di gioco")
-    if not shared["cronologia"]:
-        st.write("In attesa della prima mossa...")
-    for mossa in shared["cronologia"]:
-        st.code(mossa)
-
-    # Auto-refresh: siccome Streamlit non è "push", aggiungiamo un tasto per aggiornare
-    if st.button("🔄 Aggiorna Tabellone"):
+# Sidebar per Reset e Info
+with st.sidebar:
+    if st.button("🗑️ Reset Totale Sfida"):
+        for k in game: game[k] = None
+        game["p1_mosse"], game["p2_mosse"] = [], []
+        game["turno"] = "Giocatore 1"
         st.rerun()
+    st.write("---")
+    st.info("Regole: Impostate le chiavi, poi alternatevi i tentativi. Il primo che arriva a VVVVV vince!")
+
+# FASE 1: Configurazione Chiavi
+if game["p1_chiave"] is None or game["p2_chiave"] is None:
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Giocatore 1")
+        k1 = st.text_input("Imposta chiave per G2:", type="password", key="set_k1")
+        if st.button("Conferma Chiave G1") and len(k1)==5:
+            game["p1_chiave"] = k1
+            st.success("Chiave G1 salvata!")
+            st.rerun()
+    with col2:
+        st.subheader("Giocatore 2")
+        k2 = st.text_input("Imposta chiave per G1:", type="password", key="set_k2")
+        if st.button("Conferma Chiave G2") and len(k2)==5:
+            game["p2_chiave"] = k2
+            st.success("Chiave G2 salvata!")
+            st.rerun()
+    st.stop()
+
+# FASE 2: Gioco Sincrono
+if game["vincitore"]:
+    st.balloons()
+    st.success(f"🏆 IL VINCITORE È {game['vincitore']}!")
+else:
+    st.subheader(f"C'est le tour de: **{game['turno']}**")
+
+col_g1, col_g2 = st.columns(2)
+
+# --- GIOCATORE 1 ---
+with col_g1:
+    st.markdown("### 🟦 Giocatore 1")
+    st.caption("Obiettivo: Indovinare la chiave di G2")
+    if game["turno"] == "Giocatore 1" and not game["vincitore"]:
+        with st.form("form_g1", clear_on_submit=True):
+            t1 = st.text_input("Tuo tentativo:")
+            if st.form_submit_button("Invia") and len(t1)==5:
+                res = calcola_feedback(game["p2_chiave"], t1)
+                game["p1_mosse"].insert(0, (t1, res))
+                if res == "VVVVV": game["vincitore"] = "Giocatore 1"
+                game["turno"] = "Giocatore 2"
+                st.rerun()
+    
+    for m, r in game["p1_mosse"]:
+        st.text(f"{m} -> {r}")
+
+# --- GIOCATORE 2 ---
+with col_g2:
+    st.markdown("### 🟥 Giocatore 2")
+    st.caption("Obiettivo: Indovinare la chiave di G1")
+    if game["turno"] == "Giocatore 2" and not game["vincitore"]:
+        with st.form("form_g2", clear_on_submit=True):
+            t2 = st.text_input("Tuo tentativo:")
+            if st.form_submit_button("Invia") and len(t2)==5:
+                res = calcola_feedback(game["p1_chiave"], t2)
+                game["p2_mosse"].insert(0, (t2, res))
+                if res == "VVVVV": game["vincitore"] = "Giocatore 2"
+                game["turno"] = "Giocatore 1"
+                st.rerun()
+    
+    for m, r in game["p2_mosse"]:
+        st.text(f"{m} -> {r}")
+
+if st.button("🔄 Aggiorna Schermo"):
+    st.rerun()
