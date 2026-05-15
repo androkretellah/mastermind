@@ -3,7 +3,7 @@ from streamlit_autorefresh import st_autorefresh
 
 # 1. Configurazione
 st.set_page_config(page_title="Mastermind Pro", layout="wide")
-st_autorefresh(interval=2000, key="global_refresh")
+st_autorefresh(interval=1500, key="global_refresh")
 
 COLOR_MAP = {
     "1": "🔴", "2": "🔵", "3": "🟢", "4": "🟡", 
@@ -31,7 +31,8 @@ def reset_game():
         "turno": "Giocatore 1", "vincitore": None,
         "p1_preso": False, "p2_preso": False
     })
-    if "ruolo" in st.session_state: del st.session_state.ruolo
+    if "ruolo" in st.session_state: 
+        del st.session_state.ruolo
     st.rerun()
 
 def calcola_feedback(chiave, tentativo, n_cifre):
@@ -48,7 +49,14 @@ def calcola_feedback(chiave, tentativo, n_cifre):
                     o += 1
                     usato_chiave[j] = True
                     break
-    return ('V' * v) + ('O' * o)
+    # Feedback aggiornato: Spunta verde per corretto, Cerchio vuoto rosso/rosso-bold per posizione errata
+    return ("✅" * v) + ("⭕" * o)
+
+# --- CONTROLLO DISCONNESSIONE ---
+if "ruolo" in st.session_state:
+    if not game["p1_preso"] or not game["p2_preso"]:
+        del st.session_state.ruolo
+        st.rerun()
 
 # --- LOBBY ---
 if "ruolo" not in st.session_state:
@@ -58,7 +66,6 @@ if "ruolo" not in st.session_state:
     
     with col_cfg:
         st.subheader("⚙️ Impostazioni Partita")
-        # Widget locali per evitare lag
         n_c = st.select_slider("Numero di cifre (difficoltà)", options=[3, 4, 5, 6, 7, 8], value=game["n_cifre"])
         mod = st.radio("Modalità", ["Colori", "Numeri"], index=0 if game["modalita"]=="Colori" else 1, horizontal=True)
         
@@ -95,15 +102,21 @@ n_cifre = game["n_cifre"]
 low, high = game["range_cifre"]
 mia_chiave = game["p1_chiave"] if ruolo == "Giocatore 1" else game["p2_chiave"]
 
+# SIDEBAR
 st.sidebar.title(f"🕹️ {ruolo}")
-if st.sidebar.button("Esci / Reset"): reset_game()
+if st.sidebar.button("Esci / Abbandona ⬅️"):
+    reset_game()
 
-# 1. Impostazione Chiave (con pulsanti)
+if mia_chiave:
+    if st.sidebar.checkbox("👁️ Mostra la mia chiave"):
+        chiave_visiva = "".join([COLOR_MAP[c] if game["modalita"] == "Colori" else c for c in mia_chiave])
+        st.sidebar.info(f"Codice segreto: {chiave_visiva}")
+
+# 1. Impostazione Chiave
 if mia_chiave is None:
     st.header(f"🔐 Crea il tuo codice ({n_cifre} cifre)")
     if "temp_key" not in st.session_state: st.session_state.temp_key = ""
     
-    # Pulsanti dinamici basati sul range scelto
     cols = st.columns(high - low + 1)
     for i, val in enumerate(range(low, high + 1)):
         label = COLOR_MAP[str(val)] if game["modalita"] == "Colori" else str(val)
@@ -160,7 +173,7 @@ if game["p1_chiave"] and game["p2_chiave"]:
                 game["p2_mosse"].insert(0, (st.session_state.temp_guess, res))
                 game["turno"] = "Giocatore 1"
             
-            if res == "V" * n_cifre: game["vincitore"] = ruolo
+            if res == "✅" * n_cifre: game["vincitore"] = ruolo
             st.session_state.temp_guess = ""
             st.rerun()
         if b2.button("Svuota 🗑️", disabled=not mio_turno): st.session_state.temp_guess = ""
@@ -172,9 +185,9 @@ if game["p1_chiave"] and game["p2_chiave"]:
         with t1:
             for m, r in mie:
                 m_txt = "".join([COLOR_MAP[c] for c in m]) if game["modalita"] == "Colori" else m
-                st.write(f"{m_txt} ➡️ Feedback: `{r}`")
+                st.write(f"{m_txt} ➡️ Esito: {r if r else '❌ (Nessun riscontro)'}")
         with t2:
             for m, r in avv:
-                st.write(f"Ha provato... ➡️ Feedback: `{r}`")
+                st.write(f"L'avversario ha tentato una mossa ➡️ Esito: {r if r else '❌'}")
 else:
     st.info("In attesa che l'avversario imposti la sua chiave segreta...")
