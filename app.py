@@ -4,8 +4,7 @@ from streamlit_autorefresh import st_autorefresh
 # 1. Configurazione Iniziale
 st.set_page_config(page_title="Mastermind Pro 1vs1", layout="wide")
 
-# Installazione necessaria: pip install streamlit-autorefresh
-# Auto-refresh ogni 3 secondi per vedere le mosse dell'avversario
+# Auto-refresh ogni 3 secondi per sincronizzare i due giocatori
 st_autorefresh(interval=3000, key="datarefresh")
 
 @st.cache_resource
@@ -34,11 +33,9 @@ def calcola_feedback(chiave, tentativo):
                     break
     return ('V' * v) + ('O' * o)
 
-# --- SCHERMATA DI SELEZIONE CARINA ---
+# --- SCHERMATA DI SELEZIONE ---
 if "ruolo" not in st.session_state:
     st.markdown("<h1 style='text-align: center;'>🕵️ Mastermind Online 1vs1</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center;'>Seleziona il tuo profilo per iniziare la sfida</p>", unsafe_allow_html=True)
-    
     col_a, col_b, col_c = st.columns([1, 2, 1])
     with col_b:
         c1, c2 = st.columns(2)
@@ -52,63 +49,76 @@ if "ruolo" not in st.session_state:
 
 ruolo_utente = st.session_state.ruolo
 
-# --- HEADER ---
-st.markdown(f"### 🎮 Stai giocando come: `{ruolo_utente}`")
-if st.sidebar.button("🗑️ Reset Partita"):
-    for k in game: game[k] = None
-    game["p1_mosse"], game["p2_mosse"] = [], []
-    game["turno"] = "Giocatore 1"
-    st.rerun()
-
-# --- FASE 1: SETTING CHIAVI ---
-if game["p1_chiave"] is None or game["p2_chiave"] is None:
-    st.info("Attesa configurazione chiavi...")
+# --- SIDEBAR ---
+with st.sidebar:
+    st.markdown(f"Stai giocando come:<br><h2>{ruolo_utente}</h2>", unsafe_allow_html=True)
+    if st.button("🗑️ Reset Partita"):
+        for k in game: game[k] = None
+        game["p1_mosse"], game["p2_mosse"] = [], []
+        game["turno"] = "Giocatore 1"
+        st.rerun()
     
-    if ruolo_utente == "Giocatore 1" and game["p1_chiave"] is None:
-        with st.container(border=True):
-            k1 = st.text_input("Imposta chiave per il tuo avversario:", type="password", help="5 cifre")
-            if st.button("Conferma Chiave"):
-                if len(k1) == 5 and k1.isdigit():
-                    game["p1_chiave"] = k1
+    st.divider()
+    
+    # PULSANTE PER MOSTRARE LA PROPRIA CHIAVE
+    mia_chiave_impostata = game["p1_chiave"] if ruolo_utente == "Giocatore 1" else game["p2_chiave"]
+    if mia_chiave_impostata:
+        if st.checkbox("👁️ Mostra la mia chiave"):
+            st.info(f"La tua chiave segreta è: **{mia_chiave_impostata}**")
+
+# --- FASE 1: SETTING CHIAVI (Con supporto INVIO) ---
+if game["p1_chiave"] is None or game["p2_chiave"] is None:
+    st.info("Configurazione chiavi in corso...")
+    
+    # Verifichiamo se l'utente attuale deve ancora impostare la chiave
+    deve_impostare = (ruolo_utente == "Giocatore 1" and game["p1_chiave"] is None) or \
+                     (ruolo_utente == "Giocatore 2" and game["p2_chiave"] is None)
+
+    if deve_impostare:
+        with st.form("form_chiave", clear_on_submit=True):
+            st.subheader("Imposta la tua chiave")
+            st.write("L'avversario dovrà indovinare questa sequenza.")
+            k_input = st.text_input("Inserisci 5 cifre e premi INVIO:", type="password", max_chars=5)
+            submit_k = st.form_submit_button("Conferma Chiave")
+            
+            if submit_k:
+                if len(k_input) == 5 and k_input.isdigit():
+                    if ruolo_utente == "Giocatore 1": game["p1_chiave"] = k_input
+                    else: game["p2_chiave"] = k_input
                     st.rerun()
-    elif ruolo_utente == "Giocatore 2" and game["p2_chiave"] is None:
-        with st.container(border=True):
-            k2 = st.text_input("Imposta chiave per il tuo avversario:", type="password", help="5 cifre")
-            if st.button("Conferma Chiave"):
-                if len(k2) == 5 and k2.isdigit():
-                    game["p2_chiave"] = k2
-                    st.rerun()
+                else:
+                    st.error("Inserisci esattamente 5 cifre numeriche.")
     else:
-        st.warning("Hai fatto la tua parte! Aspetta che l'altro giocatore imposti la sua chiave.")
+        st.warning("Hai già impostato la tua chiave. In attesa dell'avversario...")
+        if st.button("🔄 Controlla se è pronto"): st.rerun()
     st.stop()
 
-# --- FASE 2: BATTLEFIELD ---
+# --- FASE 2: GIOCO ---
 if game["vincitore"]:
     if game["vincitore"] == ruolo_utente:
         st.balloons()
         st.success("🎉 HAI VINTO!")
     else:
-        st.error(f"💀 HAI PERSO! Il {game['vincitore']} ha indovinato per primo.")
-    if st.button("Torna alla Home"):
+        st.error(f"💀 HAI PERSO! Il {game['vincitore']} ha vinto.")
+    if st.button("Torna alla Selezione"):
         del st.session_state.ruolo
         st.rerun()
     st.stop()
 
-# Layout Gioco
 col_input, col_log = st.columns([1, 2])
 
 with col_input:
     st.markdown(f"#### Turno di: **{game['turno']}**")
     mio_turno = (ruolo_utente == game["turno"])
     
-    # Form con clear_on_submit=True resetta la casella automaticamente
     with st.form("guess_form", clear_on_submit=True):
-        st.write("Inserisci il tuo tentativo")
-        tentativo = st.text_input("Cifre:", max_chars=5, disabled=not mio_turno)
-        submit = st.form_submit_button("INVIA TENTATIVO", use_container_width=True, disabled=not mio_turno)
+        st.write("Fai il tuo tentativo")
+        tentativo = st.text_input("Cifre (Invio per confermare):", max_chars=5, disabled=not mio_turno)
+        submit = st.form_submit_button("INVIA", use_container_width=True, disabled=not mio_turno)
         
         if submit and mio_turno:
             if len(tentativo) == 5 and tentativo.isdigit():
+                # Bersaglio incrociato
                 target = game["p2_chiave"] if ruolo_utente == "Giocatore 1" else game["p1_chiave"]
                 res = calcola_feedback(target, tentativo)
                 
@@ -122,20 +132,13 @@ with col_input:
                 if res == "VVVVV":
                     game["vincitore"] = ruolo_utente
                 st.rerun()
-            else:
-                st.error("Inserisci 5 cifre numeriche!")
 
 with col_log:
-    tab1, tab2 = st.tabs(["📊 I MIEI TENTATIVI", "🔭 AVVERSARIO"])
-    
+    tab1, tab2 = st.tabs(["📊 I MIEI TENTATIVI", "🔭 MOSSE AVVERSARIO"])
     mie = game["p1_mosse"] if ruolo_utente == "Giocatore 1" else game["p2_mosse"]
     avv = game["p2_mosse"] if ruolo_utente == "Giocatore 1" else game["p1_mosse"]
     
     with tab1:
-        for m, r in mie:
-            st.markdown(f"**{m}** → `{r}`")
-            
+        for m, r in mie: st.markdown(f"**{m}** → `{r}`")
     with tab2:
-        for m, r in avv:
-            # Mostriamo solo il feedback per non barare, o la mossa intera se preferisci
-            st.markdown(f"Mossa avversario → `{r}`")
+        for m, r in avv: st.markdown(f"Mossa avversario → `{r}`")
