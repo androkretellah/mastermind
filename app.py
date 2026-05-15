@@ -25,6 +25,17 @@ def get_shared_game():
 
 game = get_shared_game()
 
+# --- SINCRONIZZAZIONE STATO INTERFACCIA (LOBBY) ---
+# Questo blocco garantisce che le modifiche di un giocatore sovrascrivano lo stato locale dell'altro
+if "ruolo" not in st.session_state:
+    for opzione in ["modalita", "n_cifre", "range_cifre", "max_tentativi"]:
+        if f"lobby_{opzione}" in st.session_state:
+            # Se l'utente locale ha modificato il widget, aggiorna il server condiviso
+            game[opzione] = st.session_state[f"lobby_{opzione}"]
+        else:
+            # Altrimenti (primo accesso o aggiornamento passivo), scarica il valore dal server condiviso
+            st.session_state[f"lobby_{opzione}"] = game[opzione]
+
 def calcola_feedback(chiave, tentativo, n_cifre):
     usato_chiave, usato_tentativo = [False]*n_cifre, [False]*n_cifre
     v, o = 0, 0
@@ -44,9 +55,12 @@ def calcola_feedback(chiave, tentativo, n_cifre):
 def reset_game():
     for k in ["p1_chiave", "p2_chiave", "vincitore"]: game[k] = None
     game.update({"p1_mosse": [], "p2_mosse": [], "turno": "Giocatore 1", "p1_preso": False, "p2_preso": False})
+    # Resetta anche le chiavi di sessione temporanee della lobby
+    for opzione in ["modalita", "n_cifre", "range_cifre", "max_tentativi"]:
+        if f"lobby_{opzione}" in st.session_state:
+            del st.session_state[f"lobby_{opzione}"]
 
 # --- CONTROLLO SINCRONIZZAZIONE DISCONNESSI ---
-# Se un giocatore ha forzato il reset globale tornando alla lobby, l'altro viene buttato fuori
 if "ruolo" in st.session_state:
     if st.session_state.ruolo == "Giocatore 1" and not game["p1_preso"]:
         del st.session_state.ruolo
@@ -65,26 +79,31 @@ if "ruolo" not in st.session_state:
     
     with col_cfg:
         st.subheader("⚙️ Regole della Sfida")
-        game["modalita"] = st.radio("Modalità:", ["Colori", "Numeri"], horizontal=True, disabled=impostazioni_bloccate)
-        game["n_cifre"] = st.slider("Lunghezza sequenza:", 3, 8, game["n_cifre"], disabled=impostazioni_bloccate)
+        
+        # Sincronizzazione dinamica tramite la chiave 'on_change' implicitamente legata a st.session_state
+        st.radio("Modalità:", ["Colori", "Numeri"], key="lobby_modalita", horizontal=True, disabled=impostazioni_bloccate)
+        st.slider("Lunghezza sequenza:", 3, 8, key="lobby_n_cifre", disabled=impostazioni_bloccate)
         
         st.write("Intervallo cifre/colori consentiti:")
-        r_min, r_max = st.select_slider(
+        st.select_slider(
             "Seleziona Min e Max:",
             options=list(range(1, 10)),
-            value=game["range_cifre"],
+            key="lobby_range_cifre",
             disabled=impostazioni_bloccate
         )
-        game["range_cifre"] = (r_min, r_max)
-        game["max_tentativi"] = st.number_input("Max tentativi (0=∞):", 0, 50, game["max_tentativi"], disabled=impostazioni_bloccate)
+        st.number_input("Max tentativi (0=∞):", 0, 50, key="lobby_max_tentativi", disabled=impostazioni_bloccate)
+
+        if impostazioni_bloccate:
+            st.warning("🔒 Impostazioni bloccate da un giocatore pronto.")
 
     with col_players:
         st.subheader("👥 Scegli il tuo Ruolo")
         c1, c2 = st.columns(2)
         
+        r_min, r_max = game["range_cifre"]
         config_valida = r_min < r_max
         if not config_valida:
-            st.error("Errore: Seleziona almeno due valori diversi!")
+            st.error("Errore: Seleziona almeno due valori diversi nello slider!")
         
         if c1.button("🟦 GIOCATORE 1", use_container_width=True, disabled=game["p1_preso"] or not config_valida):
             game["p1_preso"] = True
@@ -96,7 +115,7 @@ if "ruolo" not in st.session_state:
             st.rerun()
     st.stop()
 
-# --- GIOCO ATTIVO ---
+# --- VARIABILI DI GIOCO ATTIVE ---
 ruolo = st.session_state.ruolo
 n_cifre = game["n_cifre"]
 low, high = game["range_cifre"]
@@ -104,7 +123,6 @@ low, high = game["range_cifre"]
 with st.sidebar:
     st.title(f"🎮 {ruolo}")
     
-    # Se esco io, resetto totalmente la stanza per far uscire anche l'altro giocatore
     if st.button("⬅️ Cambia Ruolo / Esci"):
         reset_game()
         del st.session_state.ruolo
@@ -116,7 +134,6 @@ with st.sidebar:
         st.rerun()
     st.divider()
     
-    # SPUNTA DI CONTROLLO CHIAVE (RIPRISTINATA)
     mia_chiave = game["p1_chiave"] if ruolo == "Giocatore 1" else game["p2_chiave"]
     if mia_chiave:
         if st.checkbox("👁️ Mostra mia chiave"):
