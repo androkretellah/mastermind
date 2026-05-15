@@ -51,6 +51,15 @@ def calcola_feedback(chiave, tentativo, n_cifre):
                     break
     return ("✅" * v) + ("⭕" * o)
 
+# --- FUNZIONI CALLBACK PER INGRESSO IMMEDIATO ---
+def entra_giocatore_1():
+    game["p1_preso"] = True
+    st.session_state.ruolo = "Giocatore 1"
+
+def entra_giocatore_2():
+    game["p2_preso"] = True
+    st.session_state.ruolo = "Giocatore 2"
+
 # --- CONTROLLO DISCONNESSIONE ---
 if "ruolo" in st.session_state:
     if not game["p1_preso"] or not game["p2_preso"]:
@@ -85,30 +94,24 @@ if "ruolo" not in st.session_state:
     with col_p:
         st.subheader("👥 Partecipa alla Stanza")
         
-        # Logica del Tasto Unico di Ingresso Dinamico
+        # Gestione Tasto Unico con on_click nativo di Streamlit
         if not game["p1_preso"]:
-            button_label = "🎮 ENTRA COME GIOCATORE 1"
-            target_role = "Giocatore 1"
-            btn_disabled = False
+            st.button(
+                "🎮 ENTRA IN PARTITA (Sarai Giocatore 1)", 
+                on_click=entra_giocatore_1, 
+                use_container_width=True, 
+                type="primary"
+            )
         elif not game["p2_preso"]:
-            button_label = "🎮 ENTRA COME GIOCATORE 2"
-            target_role = "Giocatore 2"
-            btn_disabled = False
+            st.button(
+                "🎮 ENTRA IN PARTITA (Sarai Giocatore 2)", 
+                on_click=entra_giocatore_2, 
+                use_container_width=True, 
+                type="primary"
+            )
         else:
-            button_label = "🚫 STANZA PIENA"
-            target_role = None
-            btn_disabled = True
+            st.button("🚫 STANZA PIENA", disabled=True, use_container_width=True)
             
-        if st.button(button_label, disabled=btn_disabled, use_container_width=True, type="primary"):
-            if target_role == "Giocatore 1":
-                game["p1_preso"] = True
-                st.session_state.ruolo = "Giocatore 1"
-            elif target_role == "Giocatore 2":
-                game["p2_preso"] = True
-                st.session_state.ruolo = "Giocatore 2"
-            st.rerun()
-            
-        # Stato attuale della lobby per chiarezza visiva
         st.write("")
         st.write(f"Stato Slot 1: {'🟢 Libero' if not game['p1_preso'] else '🔴 Occupato'}")
         st.write(f"Stato Slot 2: {'🟢 Libero' if not game['p2_preso'] else '🔴 Occupato'}")
