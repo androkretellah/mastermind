@@ -49,7 +49,6 @@ def calcola_feedback(chiave, tentativo, n_cifre):
                     o += 1
                     usato_chiave[j] = True
                     break
-    # Feedback aggiornato: Spunta verde per corretto, Cerchio vuoto rosso/rosso-bold per posizione errata
     return ("✅" * v) + ("⭕" * o)
 
 # --- CONTROLLO DISCONNESSIONE ---
@@ -84,16 +83,36 @@ if "ruolo" not in st.session_state:
                 st.error("Il Min deve essere minore del Max")
 
     with col_p:
-        st.subheader("👥 Partecipa")
-        ca, cb = st.columns(2)
-        if ca.button("GIOCATORE 1", disabled=game["p1_preso"], use_container_width=True):
-            game["p1_preso"] = True
-            st.session_state.ruolo = "Giocatore 1"
+        st.subheader("👥 Partecipa alla Stanza")
+        
+        # Logica del Tasto Unico di Ingresso Dinamico
+        if not game["p1_preso"]:
+            button_label = "🎮 ENTRA COME GIOCATORE 1"
+            target_role = "Giocatore 1"
+            btn_disabled = False
+        elif not game["p2_preso"]:
+            button_label = "🎮 ENTRA COME GIOCATORE 2"
+            target_role = "Giocatore 2"
+            btn_disabled = False
+        else:
+            button_label = "🚫 STANZA PIENA"
+            target_role = None
+            btn_disabled = True
+            
+        if st.button(button_label, disabled=btn_disabled, use_container_width=True, type="primary"):
+            if target_role == "Giocatore 1":
+                game["p1_preso"] = True
+                st.session_state.ruolo = "Giocatore 1"
+            elif target_role == "Giocatore 2":
+                game["p2_preso"] = True
+                st.session_state.ruolo = "Giocatore 2"
             st.rerun()
-        if cb.button("GIOCATORE 2", disabled=game["p2_preso"], use_container_width=True):
-            game["p2_preso"] = True
-            st.session_state.ruolo = "Giocatore 2"
-            st.rerun()
+            
+        # Stato attuale della lobby per chiarezza visiva
+        st.write("")
+        st.write(f"Stato Slot 1: {'🟢 Libero' if not game['p1_preso'] else '🔴 Occupato'}")
+        st.write(f"Stato Slot 2: {'🟢 Libero' if not game['p2_preso'] else '🔴 Occupato'}")
+        
     st.stop()
 
 # --- GIOCO ATTIVO ---
