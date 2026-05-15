@@ -1,5 +1,16 @@
 import streamlit as st
 
+# 1. Database condiviso tra tutti gli utenti del server
+@st.cache_resource
+def get_shared_state():
+    return {
+        "chiave": None,
+        "cronologia": [],
+        "turno": 0  # Per gestire l'alternanza (opzionale)
+    }
+
+shared = get_shared_state()
+
 def calcola_feedback(chiave, tentativo):
     usato_chiave = [False] * 5
     usato_tentativo = [False] * 5
@@ -19,49 +30,54 @@ def calcola_feedback(chiave, tentativo):
                     break
     return ('V' * v_count) + ('O' * o_count)
 
-st.title("🕵️ Mastermind Online")
+st.set_page_config(page_title="Mastermind Sincrono", page_icon="👥")
+st.title("👥 Mastermind Sincrono")
 
-# Inizializzazione variabili di sessione
-if 'chiave' not in st.session_state:
-    st.session_state.chiave = None
-if 'cronologia' not in st.session_state:
-    st.session_state.cronologia = []
+# --- LOGICA DI RESET ---
+if st.sidebar.button("🗑️ Reset Totale Partita"):
+    shared["chiave"] = None
+    shared["cronologia"] = []
+    st.rerun()
 
-# FASE 1: Impostazione Chiave
-if st.session_state.chiave is None:
+# --- FASE 1: IMPOSTAZIONE CHIAVE ---
+if shared["chiave"] is None:
     st.subheader("Configurazione Partita")
-    nuova_chiave = st.text_input("Inserisci la chiave segreta (5 cifre):", type="password")
-    if st.button("Imposta Chiave"):
+    st.write("Uno dei due giocatori inserisca la chiave segreta.")
+    nuova_chiave = st.text_input("Inserisci chiave (5 cifre):", type="password")
+    if st.button("Conferma Chiave"):
         if len(nuova_chiave) == 5 and nuova_chiave.isdigit():
-            st.session_state.chiave = nuova_chiave
+            shared["chiave"] = nuova_chiave
             st.rerun()
         else:
-            st.error("La chiave deve essere di 5 cifre!")
+            st.error("Deve essere di 5 cifre!")
 
-# FASE 2: Gioco
+# --- FASE 2: GIOCO SINCRONO ---
 else:
-    st.info("Chiave impostata! L'avversario può iniziare a indovinare.")
+    st.success("Partita in corso! Entrambi vedete gli stessi tentativi.")
     
-    with st.form(key='gioco_form', clear_on_submit=True):
-        tentativo = st.text_input("Inserisci il tuo tentativo (5 cifre):")
-        submit = st.form_submit_button("Invia")
+    # Form per l'inserimento
+    with st.form(key='sync_form', clear_on_submit=True):
+        tentativo = st.text_input("Inserisci il tuo tentativo:")
+        submit = st.form_submit_button("Invia Mossa")
 
     if submit:
         if len(tentativo) == 5 and tentativo.isdigit():
-            risultato = calcola_feedback(st.session_state.chiave, tentativo)
-            st.session_state.cronologia.insert(0, f"Tentativo: {tentativo} | Risultato: {risultato}")
+            risultato = calcola_feedback(shared["chiave"], tentativo)
+            # Aggiungiamo alla lista condivisa
+            shared["cronologia"].insert(0, f"Mossa: {tentativo} -> Feedback: {risultato}")
             if risultato == "VVVVV":
                 st.balloons()
-                st.success("VITTORIA! Hai indovinato la sequenza.")
+            st.rerun() # Forza l'aggiornamento per l'altro utente
         else:
             st.error("Inserisci 5 cifre.")
 
-    # Tasto ESC (Reset)
-    if st.button("🔄 Reset (Nuova Chiave)"):
-        st.session_state.chiave = None
-        st.session_state.cronologia = []
-        st.rerun()
+    # Visualizzazione Cronologia Condivisa
+    st.subheader("Tabellone di gioco")
+    if not shared["cronologia"]:
+        st.write("In attesa della prima mossa...")
+    for mossa in shared["cronologia"]:
+        st.code(mossa)
 
-    # Visualizzazione cronologia
-    for r in st.session_state.cronologia:
-        st.write(r)
+    # Auto-refresh: siccome Streamlit non è "push", aggiungiamo un tasto per aggiornare
+    if st.button("🔄 Aggiorna Tabellone"):
+        st.rerun()
