@@ -1,5 +1,7 @@
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
+# Importiamo il componente per il disegno col mouse
+from streamlit_drawable_canvas import st_canvas
 
 # 1. Configurazione Iniziale
 st.set_page_config(page_title="Mastermind dei Gay", layout="wide")
@@ -310,14 +312,13 @@ if game["p1_chiave"] and game["p2_chiave"]:
                     st.session_state.errore_gioco = ""
                     st.rerun()
 
-            # --- SUB-INTERFACCIA MODALITÀ NUMERI (ALLINEATA A SINISTRA SU UNA RIGA) ---
+            # --- SUB-INTERFACCIA MODALITÀ NUMERI ---
             else:
                 with st.form("game_numeric_guess", clear_on_submit=True):
-                    # Uso delle colonne interne al form per posizionare input e pulsante sulla stessa riga
                     col_input, col_submit = st.columns([3, 1])
                     
                     with col_input:
-                        g = st.text_input(f"Inserisci {n_cifre} cifre (range {low}-{high}) e premi INVIO:", max_chars=n_cifre, label_visibility="collapsed")
+                        g = st.text_input(f"Inserisci {n_cifre} cifre (range {low}-{high}) e primi INVIO:", max_chars=n_cifre, label_visibility="collapsed")
                     
                     with col_submit:
                         invia_mossa = st.form_submit_button("🚀 Invia Mossa", use_container_width=True)
@@ -359,13 +360,40 @@ if game["p1_chiave"] and game["p2_chiave"]:
                             st.session_state.errore_gioco = ""
                             st.rerun()
 
+        # --- NOTEPAD DA DISEGNO (ZONA CANVAS COL MOUSE) ---
+        st.write("")
+        st.divider()
+        st.subheader("📝 Appunti Disegnati (Notepad)")
+        st.caption("Usa il mouse per scriverti promemoria o combinazioni escluse. Resta privato!")
+        
+        # Una chiave di reset dinamica basata sulla session_state per pulire il canvas
+        canvas_key = f"canvas_{ruolo}"
+        if f"reset_{ruolo}" not in st.session_state:
+            st.session_state[f"reset_{ruolo}"] = 0
+            
+        # Il componente Canvas di Streamlit
+        st_canvas(
+            fill_color="rgba(255, 165, 0, 0.3)",
+            stroke_width=3,
+            stroke_color="#FFFFFF",
+            background_color="#1E1E1E",
+            height=150,
+            drawing_mode="freedraw",
+            key=f"{canvas_key}_{st.session_state[f'reset_{ruolo}']}",
+            display_toolbar=False,
+            update_streamlit=False # Velocizza le prestazioni riducendo i rinfreschi continui durante il disegno
+        )
+        
+        if st.button("🗑️ Cancella Disegno", key=f"btn_clear_{ruolo}"):
+            st.session_state[f"reset_{ruolo}"] += 1
+            st.rerun()
+
     # --- CRONOLOGIA AFFIANCATA ED ELABORAZIONE SCONFITTA ---
     with col_stats:
         st.subheader("📊 Cronologia Mosse in Tempo Reale")
         
         chiave_avversaria = game["p2_chiave"] if ruolo == "Giocatore 1" else game["p1_chiave"]
         
-        # Rivela la chiave dell'avversario se il gioco è finito e il giocatore corrente NON è il vincitore solitario
         if game["vincitore"] and game["vincitore"] != ruolo:
             if game["modalita"] == "Colori":
                 chiave_visibile = "".join([COLOR_MAP[c] for c in chiave_avversaria])
@@ -374,7 +402,7 @@ if game["p1_chiave"] and game["p2_chiave"]:
             st.error(f"👁️ **La chiave segreta del tuo avversario era:** {chiave_visibile}")
             
         mie = game["p1_mosse"] if ruolo == "Giocatore 1" else game["p2_mosse"]
-        avv = game["p2_mosse"] if ruolo == "Giocatore 1" else game["p1_mosse"]
+        avv = game["p2_mosse"] if xaxis := ruolo == "Giocatore 1" else game["p1_mosse"]
         
         col_mie_tab, col_avv_tab = st.columns(2)
         
