@@ -207,11 +207,9 @@ if game["p1_chiave"] and game["p2_chiave"]:
     col_gioco, col_stats = st.columns([1, 1])
     mio_turno = (game["turno"] == ruolo)
     
-    # Inizializzazione variabili persistenti di errore gioco
     if "errore_gioco" not in st.session_state: st.session_state.errore_gioco = ""
 
     with col_gioco:
-        # MODIFICA: Se c'è un vincitore, blocca la possibilità di inserimento ma mostra le opzioni di fine partita
         if game["vincitore"]:
             st.success(f"🏆 IL VINCITORE È {game['vincitore']}!")
             if st.button("Ricomincia (Nuova Partita)", use_container_width=True): 
@@ -236,7 +234,6 @@ if game["p1_chiave"] and game["p2_chiave"]:
                     val_str = str(val)
                     bottone_disabilitato = (not game["ripetizione_ammessa"] and val_str in st.session_state.current_guess)
                     
-                    # MODIFICA: I pulsanti del tastierino NON sono più bloccati se non è il tuo turno
                     if btn_cols[i].button(COLOR_MAP[val_str], key=f"btn_g_{val}", disabled=bottone_disabilitato):
                         st.session_state.errore_gioco = ""
                         if not game["ripetizione_ammessa"] and val_str in st.session_state.current_guess:
@@ -253,7 +250,6 @@ if game["p1_chiave"] and game["p2_chiave"]:
                     st.session_state.errore_gioco = ""
                     st.rerun()
                 
-                # MODIFICA: Solo il pulsante INVIA viene bloccato se non è il proprio turno
                 if c2.button("🚀 INVIA MOSSA", use_container_width=True, disabled=not (mio_turno and len(st.session_state.current_guess) == n_cifre)):
                     target = game["p2_chiave"] if ruolo == "Giocatore 1" else game["p1_chiave"]
                     res = calcola_feedback(target, st.session_state.current_guess, n_cifre)
@@ -266,8 +262,6 @@ if game["p1_chiave"] and game["p2_chiave"]:
                     st.session_state.errore_gioco = ""
                     st.rerun()
             else:
-                # Modalità Numerica adattata per la compilazione anticipata
-                # Nota: le form di Streamlit si resettano all'invio, usiamo un normale text_input slegato da st.form per permettere la persistenza pre-turno
                 g = st.text_input(f"Inserisci {n_cifre} cifre:", value=st.session_state.current_guess, max_chars=n_cifre)
                 st.session_state.current_guess = g
                 
@@ -297,7 +291,7 @@ if game["p1_chiave"] and game["p2_chiave"]:
                         st.session_state.errore_gioco = "Input non valido! Controlla i limiti impostati."
                         st.rerun()
 
-    # MODIFICA: Questa colonna rimane interamente attiva ed eseguita fuori dall'if "game['vincitore']", garantendo la visibilità post-partita
+    # --- FIX CRONOLOGIA AVVERSARIO ---
     with col_stats:
         st.subheader("📊 Cronologia Partita")
         t1, t2 = st.tabs(["Mie Mosse", "Avversario"])
@@ -310,6 +304,8 @@ if game["p1_chiave"] and game["p2_chiave"]:
                 st.markdown(f"#### {m_str} ➔ {r}")
         with t2:
             for m, r in avv:
-                st.markdown(f"Mossa avversario: {r}")
+                # MODIFICA: Adesso anche per l'avversario formattiamo correttamente la mossa prima del feedback 'r'
+                m_str = "".join([COLOR_MAP[c] for c in m]) if game["modalita"] == "Colori" else m
+                st.markdown(f"#### {m_str} ➔ {r}")
 else:
     st.info("In attesa che entrambi i giocatori impostino la propria chiave...")
