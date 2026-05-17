@@ -2,7 +2,7 @@ import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
 # 1. Configurazione Iniziale
-st.set_page_config(page_title="Mastermind Pro 1-9", layout="wide")
+st.set_page_config(page_title="Mastermind dei Gay", layout="wide")
 st_autorefresh(interval=2000, key="global_refresh")
 
 COLOR_MAP = {
@@ -41,7 +41,8 @@ def calcola_feedback(chiave, tentativo, n_cifre):
                     o += 1
                     usato_chiave[j] = True
                     break
-    return ('✅' * v) + ('⚪' * o)
+    # MODIFICA: Sostituito '⚪' con '⭕' per la posizione errata
+    return ('✅' * v) + ('⭕' * o)
 
 def reset_game():
     for k in ["p1_chiave", "p2_chiave", "vincitore"]: game[k] = None
@@ -63,7 +64,8 @@ if "ruolo" in st.session_state:
 
 # --- LOBBY UNIFICATA ---
 if "ruolo" not in st.session_state:
-    st.title("🕵️ Mastermind Online 1-9")
+    # MODIFICA: Nuovo titolo della lobby
+    st.title("🕵️ Mastermind dei Gay 1-9")
     
     impostazioni_bloccate = game["p1_preso"] or game["p2_preso"]
     col_cfg, col_players = st.columns([1, 1], gap="large")
@@ -125,6 +127,9 @@ if "ruolo" not in st.session_state:
 ruolo = st.session_state.ruolo
 n_cifre = game["n_cifre"]
 low, high = game["range_cifre"]
+
+# MODIFICA: Aggiunto il titolo anche in cima alla Schermata di Gioco principale
+st.title("🏳️‍🌈 Mastermind dei Gay")
 
 with st.sidebar:
     st.title(f"🎮 {ruolo}")
@@ -291,7 +296,7 @@ if game["p1_chiave"] and game["p2_chiave"]:
                         st.session_state.errore_gioco = "Input non valido! Controlla i limiti impostati."
                         st.rerun()
 
-    # --- FIX CRONOLOGIA AVVERSARIO ---
+    # --- CRONOLOGIA AVVERSARIO ---
     with col_stats:
         st.subheader("📊 Cronologia Partita")
         t1, t2 = st.tabs(["Mie Mosse", "Avversario"])
@@ -304,7 +309,6 @@ if game["p1_chiave"] and game["p2_chiave"]:
                 st.markdown(f"#### {m_str} ➔ {r}")
         with t2:
             for m, r in avv:
-                # MODIFICA: Adesso anche per l'avversario formattiamo correttamente la mossa prima del feedback 'r'
                 m_str = "".join([COLOR_MAP[c] for c in m]) if game["modalita"] == "Colori" else m
                 st.markdown(f"#### {m_str} ➔ {r}")
 else:
