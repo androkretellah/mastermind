@@ -215,6 +215,18 @@ if mia_chiave is None:
         st.warning("⚠️ Nota: La ripetizione degli stessi elementi NON è consentita!")
 
     if game["modalita"] == "Colori":
+        # Sostituisci il pezzo del tastierino nella fase di gioco attiva con questo:
+        for i, val in enumerate(range(low, high + 1)):
+            val_str = str(val)
+            # Se le ripetizioni non sono ammesse nella chiave, spesso non hanno senso nemmeno nel tentativo
+            bottone_disabilitato = (not game["ripetizione_ammessa"] and val_str in st.session_state.current_guess)
+            
+            if btn_cols[i].button(COLOR_MAP[val_str], key=f"btn_g_{val}", disabled=not mio_turno or bottone_disabilitato):
+                if not game["ripetizione_ammessa"] and val_str in st.session_state.current_guess:
+                    pass # Ignora il click fantasma ad alta velocità
+                elif len(st.session_state.current_guess) < n_cifre:
+                    st.session_state.current_guess += val_str
+                    st.rerun()
         cols = st.columns(high - low + 1)
         for i, val in enumerate(range(low, high + 1)):
             val_str = str(val)
