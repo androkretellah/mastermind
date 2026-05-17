@@ -65,7 +65,7 @@ if "ruolo" in st.session_state:
 # --- LOBBY UNIFICATA ---
 if "ruolo" not in st.session_state:
     # MODIFICA: Nuovo titolo della lobby
-    st.title("🕵️ Mastermind dei Gay 1-9")
+    st.title("🕵️ Mastermind dei Gay")
     
     impostazioni_bloccate = game["p1_preso"] or game["p2_preso"]
     col_cfg, col_players = st.columns([1, 1], gap="large")
