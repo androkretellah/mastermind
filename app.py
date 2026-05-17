@@ -26,6 +26,22 @@ def get_shared_game():
 
 game = get_shared_game()
 
+# --- REGOLAMENTO ESPANDIBILE COPIATO PER ENTRAMBE LE SCHERMATE ---
+def mostra_regolamento():
+    with st.expander("📖 Leggi le Regole del Gioco", expanded=False):
+        st.markdown("""
+        ### Come si Gioca a Mastermind dei Gay
+        L'obiettivo è indovinare la sequenza segreta creata dal tuo avversario prima che lui indovini la tua.
+        
+        **I Feedback dopo ogni mossa:**
+        * ✅ **Spunta Verde:** Un simbolo/numero è corretto ed è nella **posizione giusta**.
+        * ⭕ **Cerchio Rosso Vuoto:** Un simbolo/numero fa parte della chiave, ma è nella **posizione sbagliata**.
+        * *Nessun simbolo:* Gli altri elementi non sono presenti nella chiave segreta.
+        
+        **Regola del Pareggio:**
+        Il gioco si sviluppa a turni completi. Se il Giocatore 1 indovina la chiave per primo, il Giocatore 2 ha il diritto di effettuare il suo ultimo tentativo di pari livello. Se indovina anche il Giocatore 2, la partita termina in **Pareggio**.
+        """)
+
 # --- CALCOLO FEEDBACK CON EMOJI ---
 def calcola_feedback(chiave, tentativo, n_cifre):
     usato_chiave, usato_tentativo = [False]*n_cifre, [False]*n_cifre
@@ -41,7 +57,6 @@ def calcola_feedback(chiave, tentativo, n_cifre):
                     o += 1
                     usato_chiave[j] = True
                     break
-    # MODIFICA: Sostituito '⚪' con '⭕' per la posizione errata
     return ('✅' * v) + ('⭕' * o)
 
 def reset_game():
@@ -64,8 +79,8 @@ if "ruolo" in st.session_state:
 
 # --- LOBBY UNIFICATA ---
 if "ruolo" not in st.session_state:
-    # MODIFICA: Nuovo titolo della lobby
     st.title("🕵️ Mastermind dei Gay")
+    mostra_regolamento()
     
     impostazioni_bloccate = game["p1_preso"] or game["p2_preso"]
     col_cfg, col_players = st.columns([1, 1], gap="large")
@@ -128,8 +143,8 @@ ruolo = st.session_state.ruolo
 n_cifre = game["n_cifre"]
 low, high = game["range_cifre"]
 
-# MODIFICA: Aggiunto il titolo anche in cima alla Schermata di Gioco principale
 st.title("🏳️‍🌈 Mastermind dei Gay")
+mostra_regolamento()
 
 with st.sidebar:
     st.title(f"🎮 {ruolo}")
@@ -216,16 +231,32 @@ if game["p1_chiave"] and game["p2_chiave"]:
 
     with col_gioco:
         if game["vincitore"]:
-            st.success(f"🏆 IL VINCITORE È {game['vincitore']}!")
+            if game["vincitore"] == "Pareggio":
+                st.info("🤝 LA PARTITA È TERMINATA IN PAREGGIO! Entrambi avete indovinato nello stesso turno.")
+            else:
+                st.success(f"🏆 IL VINCITORE È {game['vincitore']}!")
+                
             if st.button("Ricomincia (Nuova Partita)", use_container_width=True): 
                 reset_game()
                 st.rerun()
         else:
-            st.subheader(f"Turno attuale: {game['turno']}")
-            if mio_turno:
-                st.info("🟢 È il tuo turno! Componi e invia la sequenza.")
+            # Controllo blocco di fine turno per il Giocatore 2 (Diritto di replica)
+            # Se il G1 ha indovinato ma il G2 deve ancora pareggiare il numero di tentativi
+            g1_ha_vinto = len(game["p1_mosse"]) > 0 and game["p1_mosse"][0][1] == "✅" * n_cifre
+            g2_ha_vinto = len(game["p2_mosse"]) > 0 and game["p2_mosse"][0][1] == "✅" * n_cifre
+            
+            if g1_ha_vinto and not g2_ha_vinto and len(game["p1_mosse"]) > len(game["p2_mosse"]):
+                st.subheader("⚠️ Ultima chance per il Giocatore 2!")
+                if ruolo == "Giocatore 2":
+                    st.warning("🔴 Il Giocatore 1 ha indovinato! Hai un ultimo tentativo per pareggiare la partita.")
+                else:
+                    st.info("⏳ Il tuo avversario sta effettuando l'ultimo tentativo di replica.")
             else:
-                st.warning("⏳ Turno dell'avversario. Puoi portarti avanti preparando la sequenza.")
+                st.subheader(f"Turno attuale: {game['turno']}")
+                if mio_turno:
+                    st.info("🟢 È il tuo turno! Componi e invia la sequenza.")
+                else:
+                    st.warning("⏳ Turno dell'avversario. Puoi portarti avanti preparando la sequenza.")
 
             if st.session_state.errore_gioco:
                 st.error(st.session_state.errore_gioco)
@@ -258,11 +289,30 @@ if game["p1_chiave"] and game["p2_chiave"]:
                 if c2.button("🚀 INVIA MOSSA", use_container_width=True, disabled=not (mio_turno and len(st.session_state.current_guess) == n_cifre)):
                     target = game["p2_chiave"] if ruolo == "Giocatore 1" else game["p1_chiave"]
                     res = calcola_feedback(target, st.session_state.current_guess, n_cifre)
+                    
                     if ruolo == "Giocatore 1":
-                        game["p1_mosse"].insert(0, (st.session_state.current_guess, res)); game["turno"] = "Giocatore 2"
+                        game["p1_mosse"].insert(0, (st.session_state.current_guess, res))
+                        game["turno"] = "Giocatore 2"
                     else:
-                        game["p2_mosse"].insert(0, (st.session_state.current_guess, res)); game["turno"] = "Giocatore 1"
-                    if res == "✅" * n_cifre: game["vincitore"] = ruolo
+                        game["p2_mosse"].insert(0, (st.session_state.current_guess, res))
+                        game["turno"] = "Giocatore 1"
+                    
+                    # --- LOGICA DI ASSEGNAZIONE VITTORIA / REPLICA / PAREGGIO ---
+                    g1_indovina = len(game["p1_mosse"]) > 0 and game["p1_mosse"][0][1] == "✅" * n_cifre
+                    g2_indovina = len(game["p2_mosse"]) > 0 and game["p2_mosse"][0][1] == "✅" * n_cifre
+                    
+                    if len(game["p1_mosse"]) == len(game["p2_mosse"]):
+                        if g1_indovina and g2_indovina:
+                            game["vincitore"] = "Pareggio"
+                        elif g1_indovina:
+                            game["vincitore"] = "Giocatore 1"
+                        elif g2_indovina:
+                            game["vincitore"] = "Giocatore 2"
+                    else:
+                        # Se Giocatore 2 indovina al suo turno asimmetrico prima che tocchi a G1 pareggiare la lunghezza mosse
+                        if g2_indovina and not g1_indovina:
+                            game["vincitore"] = "Giocatore 2"
+                            
                     st.session_state.current_guess = ""
                     st.session_state.errore_gioco = ""
                     st.rerun()
@@ -284,11 +334,28 @@ if game["p1_chiave"] and game["p2_chiave"]:
                         else:
                             target = game["p2_chiave"] if ruolo == "Giocatore 1" else game["p1_chiave"]
                             res = calcola_feedback(target, g, n_cifre)
+                            
                             if ruolo == "Giocatore 1":
-                                game["p1_mosse"].insert(0, (g, res)); game["turno"] = "Giocatore 2"
+                                game["p1_mosse"].insert(0, (g, res))
+                                game["turno"] = "Giocatore 2"
                             else:
-                                game["p2_mosse"].insert(0, (g, res)); game["turno"] = "Giocatore 1"
-                            if res == "✅" * n_cifre: game["vincitore"] = ruolo
+                                game["p2_mosse"].insert(0, (g, res))
+                                game["turno"] = "Giocatore 1"
+                                
+                            g1_indovina = len(game["p1_mosse"]) > 0 and game["p1_mosse"][0][1] == "✅" * n_cifre
+                            g2_indovina = len(game["p2_mosse"]) > 0 and game["p2_mosse"][0][1] == "✅" * n_cifre
+                            
+                            if len(game["p1_mosse"]) == len(game["p2_mosse"]):
+                                if g1_indovina and g2_indovina:
+                                    game["vincitore"] = "Pareggio"
+                                elif g1_indovina:
+                                    game["vincitore"] = "Giocatore 1"
+                                elif g2_indovina:
+                                    game["vincitore"] = "Giocatore 2"
+                            else:
+                                if g2_indovina and not g1_indovina:
+                                    game["vincitore"] = "Giocatore 2"
+                                    
                             st.session_state.current_guess = ""
                             st.session_state.errore_gioco = ""
                             st.rerun()
@@ -296,20 +363,38 @@ if game["p1_chiave"] and game["p2_chiave"]:
                         st.session_state.errore_gioco = "Input non valido! Controlla i limiti impostati."
                         st.rerun()
 
-    # --- CRONOLOGIA AVVERSARIO ---
+    # --- CRONOLOGIA AFFIANCATA (TABELLA COMPLETA SENZA TAB) ---
     with col_stats:
-        st.subheader("📊 Cronologia Partita")
-        t1, t2 = st.tabs(["Mie Mosse", "Avversario"])
+        st.subheader("📊 Cronologia Mosse in Tempo Reale")
+        
         mie = game["p1_mosse"] if ruolo == "Giocatore 1" else game["p2_mosse"]
         avv = game["p2_mosse"] if ruolo == "Giocatore 1" else game["p1_mosse"]
         
-        with t1:
-            for m, r in mie:
-                m_str = "".join([COLOR_MAP[c] for c in m]) if game["modalita"] == "Colori" else m
-                st.markdown(f"#### {m_str} ➔ {r}")
-        with t2:
-            for m, r in avv:
-                m_str = "".join([COLOR_MAP[c] for c in m]) if game["modalita"] == "Colori" else m
-                st.markdown(f"#### {m_str} ➔ {r}")
+        col_mie_tab, col_avv_tab = st.columns(2)
+        
+        # Invertiamo temporaneamente le liste per calcolare l'indice corretto del tentativo cronologico (dal 1° all'ultimo)
+        mie_ordered = list(reversed(mie))
+        avv_ordered = list(reversed(avv))
+        
+        with col_mie_tab:
+            st.markdown("#### 👤 Le Mie Mosse")
+            if not mie_ordered:
+                st.caption("Nessun tentativo inviato.")
+            else:
+                for idx, (m, r) in enumerate(reversed(mie_ordered)):
+                    # L'indice calcolato corrisponde al numero reale del tentativo dell'utente
+                    n_tentativo = len(mie_ordered) - idx
+                    m_str = "".join([COLOR_MAP[c] for c in m]) if game["modalita"] == "Colori" else m
+                    st.markdown(f"**#{n_tentativo}** | {m_str} ➔ {r}")
+                    
+        with col_avv_tab:
+            st.markdown("#### 👁️ Mosse Avversario")
+            if not avv_ordered:
+                st.caption("L'avversario non ha ancora giocato.")
+            else:
+                for idx, (m, r) in enumerate(reversed(avv_ordered)):
+                    n_tentativo = len(avv_ordered) - idx
+                    m_str = "".join([COLOR_MAP[c] for c in m]) if game["modalita"] == "Colori" else m
+                    st.markdown(f"**#{n_tentativo}** | {m_str} ➔ {r}")
 else:
     st.info("In attesa che entrambi i giocatori impostino la propria chiave...")
