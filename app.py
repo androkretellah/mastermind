@@ -43,7 +43,7 @@ def calcola_feedback(chiave, tentativo, n_cifre):
                     o += 1
                     usato_chiave[j] = True
                     break
-    return ('✅' * v) + ('⚪' * o)
+    return ('✅' * v) + ('⭕' * o)
 
 def reset_game():
     for k in ["p1_chiave", "p2_chiave", "vincitore"]: game[k] = None
