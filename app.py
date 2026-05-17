@@ -88,7 +88,7 @@ if "ruolo" not in st.session_state:
     col_cfg, col_players = st.columns([1, 1], gap="large")
     
     with col_cfg:
-        st.subheader("⚙️ Regole della Sfida")
+        st.subheader("⚙️ Impostazioni")
         
         def on_modalita_change():
             game["modalita"] = st.session_state[f"radio_mod_{game['modalita']}"]
@@ -363,8 +363,8 @@ if game["p1_chiave"] and game["p2_chiave"]:
         # --- NOTEPAD DA DISEGNO (ZONA CANVAS COL MOUSE) ---
         st.write("")
         st.divider()
-        st.subheader("📝 Appunti Disegnati (Notepad)")
-        st.caption("Usa il mouse per scriverti promemoria o combinazioni escluse. Resta privato!")
+        st.subheader("📝 Appunti Disegnati")
+        st.caption("Usa il mouse o le dita per prendere appunti. Resta privato!")
         
         canvas_key = f"canvas_{ruolo}"
         if f"reset_{ruolo}" not in st.session_state:
