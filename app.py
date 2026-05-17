@@ -107,9 +107,9 @@ if "ruolo" not in st.session_state:
         st.write("")
         
         if not game["p1_preso"]:
-            testo_bottone, ruolo_assegnato, disabilitato = "🚪 ENTRA", False
+            testo_bottone, ruolo_assegnato, disabilitato = "🚪 ENTRA COME GIOCATORE 1", "Giocatore 1", False
         elif not game["p2_preso"]:
-            testo_bottone, ruolo_assegnato, disabilitato = "🚪 ENTRA", "Giocatore 2", False
+            testo_bottone, ruolo_assegnato, disabilitato = "🚪 ENTRA COME GIOCATORE 2", "Giocatore 2", False
         else:
             testo_bottone, ruolo_assegnato, disabilitato = "❌ STANZA PIENA", None, True
             
