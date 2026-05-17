@@ -113,7 +113,7 @@ if "ruolo" not in st.session_state:
         config_valida = game["range_cifre"][0] < game["range_cifre"][1]
         elementi_disponibili = game["range_cifre"][1] - game["range_cifre"][0] + 1
         
-        if not game["ripetizione_ammessa"] and game["n_cifre"] > elementi_disponibili:
+        if not game["ripetizione_ammessa"] and game["n_cifre"] > elementi_disponibles:
             config_valida = False
             st.error(f"Errore: Senza ripetizioni, la lunghezza della sequenza ({game['n_cifre']}) non può superare il numero di elementi disponibili ({elementi_disponibili})!")
         elif not config_valida:
@@ -318,7 +318,7 @@ if game["p1_chiave"] and game["p2_chiave"]:
                     col_input, col_submit = st.columns([3, 1])
                     
                     with col_input:
-                        g = st.text_input(f"Inserisci {n_cifre} cifre (range {low}-{high}) e primi INVIO:", max_chars=n_cifre, label_visibility="collapsed")
+                        g = st.text_input(f"Inserisci {n_cifre} cifre (range {low}-{high}) e premi INVIO:", max_chars=n_cifre, label_visibility="collapsed")
                     
                     with col_submit:
                         invia_mossa = st.form_submit_button("🚀 Invia Mossa", use_container_width=True)
@@ -366,12 +366,10 @@ if game["p1_chiave"] and game["p2_chiave"]:
         st.subheader("📝 Appunti Disegnati (Notepad)")
         st.caption("Usa il mouse per scriverti promemoria o combinazioni escluse. Resta privato!")
         
-        # Una chiave di reset dinamica basata sulla session_state per pulire il canvas
         canvas_key = f"canvas_{ruolo}"
         if f"reset_{ruolo}" not in st.session_state:
             st.session_state[f"reset_{ruolo}"] = 0
             
-        # Il componente Canvas di Streamlit
         st_canvas(
             fill_color="rgba(255, 165, 0, 0.3)",
             stroke_width=3,
@@ -381,7 +379,7 @@ if game["p1_chiave"] and game["p2_chiave"]:
             drawing_mode="freedraw",
             key=f"{canvas_key}_{st.session_state[f'reset_{ruolo}']}",
             display_toolbar=False,
-            update_streamlit=False # Velocizza le prestazioni riducendo i rinfreschi continui durante il disegno
+            update_streamlit=False
         )
         
         if st.button("🗑️ Cancella Disegno", key=f"btn_clear_{ruolo}"):
@@ -402,7 +400,7 @@ if game["p1_chiave"] and game["p2_chiave"]:
             st.error(f"👁️ **La chiave segreta del tuo avversario era:** {chiave_visibile}")
             
         mie = game["p1_mosse"] if ruolo == "Giocatore 1" else game["p2_mosse"]
-        avv = game["p2_mosse"] if xaxis := ruolo == "Giocatore 1" else game["p1_mosse"]
+        avv = game["p2_mosse"] if ruolo == "Giocatore 1" else game["p1_mosse"]
         
         col_mie_tab, col_avv_tab = st.columns(2)
         
