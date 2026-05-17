@@ -46,7 +46,6 @@ def reset_game():
     game.update({"p1_mosse": [], "p2_mosse": [], "turno": "Giocatore 1", "p1_preso": False, "p2_preso": False})
 
 # --- CONTROLLO SINCRONIZZAZIONE DISCONNESSI ---
-# Se un giocatore ha forzato il reset globale tornando alla lobby, l'altro viene buttato fuori
 if "ruolo" in st.session_state:
     if st.session_state.ruolo == "Giocatore 1" and not game["p1_preso"]:
         del st.session_state.ruolo
@@ -65,24 +64,68 @@ if "ruolo" not in st.session_state:
     
     with col_cfg:
         st.subheader("⚙️ Regole della Sfida")
-        game["modalita"] = st.radio("Modalità:", ["Colori", "Numeri"], horizontal=True, disabled=impostazioni_bloccate)
-        game["n_cifre"] = st.slider("Lunghezza sequenza:", 3, 8, game["n_cifre"], disabled=impostazioni_bloccate)
+        
+        # --- FIX SINCRONIZZAZIONE: Callback e chiavi dinamiche per aggiornare lo stato globale ---
+        def on_modalita_change():
+            game["modalita"] = st.session_state.lobby_modalita
+        
+        def on_cifre_change():
+            game["n_cifre"] = st.session_state.lobby_cifre
+
+        def on_range_change():
+            game["range_cifre"] = st.session_state.lobby_range
+
+        def on_tentativi_change():
+            game["max_tentativi"] = st.session_state.lobby_tentativi
+
+        # I componenti usano il valore di `game[...]` come indice/valore di partenza, 
+        # ma cambiano la loro `key` interna se il valore globale muta dall'esterno.
+        st.radio(
+            "Modalità:", 
+            ["Colori", "Numeri"], 
+            index=0 if game["modalita"] == "Colori" else 1,
+            key=f"modalita_{game['modalita']}", # Forza il refresh visivo se l'altro cambia
+            on_change=on_modalita_change,
+            text_input_with_label="lobby_modalita" if False else "lobby_modalita", # Trucco per assegnare il valore a session_state
+            disabled=impostazioni_bloccate
+        )
+        
+        st.slider(
+            "Lunghezza sequenza:", 
+            3, 8, 
+            value=game["n_cifre"],
+            key=f"cifre_{game['n_cifre']}",
+            on_change=on_cifre_change,
+            key_to_save="lobby_cifre" if False else "lobby_cifre",
+            disabled=impostazioni_bloccate
+        )
         
         st.write("Intervallo cifre/colori consentiti:")
         r_min, r_max = st.select_slider(
             "Seleziona Min e Max:",
             options=list(range(1, 10)),
             value=game["range_cifre"],
+            key=f"range_{game['range_cifre'][0]}_{game['range_cifre'][1]}",
+            on_change=on_range_change,
+            key_to_save="lobby_range" if False else "lobby_range",
             disabled=impostazioni_bloccate
         )
-        game["range_cifre"] = (r_min, r_max)
-        game["max_tentativi"] = st.number_input("Max tentativi (0=∞):", 0, 50, game["max_tentativi"], disabled=impostazioni_bloccate)
+        
+        st.number_input(
+            "Max tentativi (0=∞):", 
+            0, 50, 
+            value=game["max_tentativi"],
+            key=f"tentativi_{game['max_tentativi']}",
+            on_change=on_tentativi_change,
+            key_to_save="lobby_tentativi" if False else "lobby_tentativi",
+            disabled=impostazioni_bloccate
+        )
 
     with col_players:
         st.subheader("👥 Scegli il tuo Ruolo")
         c1, c2 = st.columns(2)
         
-        config_valida = r_min < r_max
+        config_valida = game["range_cifre"][0] < game["range_cifre"][1]
         if not config_valida:
             st.error("Errore: Seleziona almeno due valori diversi!")
         
@@ -103,8 +146,6 @@ low, high = game["range_cifre"]
 
 with st.sidebar:
     st.title(f"🎮 {ruolo}")
-    
-    # Se esco io, resetto totalmente la stanza per far uscire anche l'altro giocatore
     if st.button("⬅️ Cambia Ruolo / Esci"):
         reset_game()
         del st.session_state.ruolo
@@ -116,7 +157,6 @@ with st.sidebar:
         st.rerun()
     st.divider()
     
-    # SPUNTA DI CONTROLLO CHIAVE (RIPRISTINATA)
     mia_chiave = game["p1_chiave"] if ruolo == "Giocatore 1" else game["p2_chiave"]
     if mia_chiave:
         if st.checkbox("👁️ Mostra mia chiave"):
