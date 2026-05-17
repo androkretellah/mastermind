@@ -26,7 +26,7 @@ def get_shared_game():
 
 game = get_shared_game()
 
-# --- CAMBIAMENTO FEEDBACK CON EMOJI ---
+# --- CALCOLO FEEDBACK CON EMOJI ---
 def calcola_feedback(chiave, tentativo, n_cifre):
     usato_chiave, usato_tentativo = [False]*n_cifre, [False]*n_cifre
     v, o = 0, 0
@@ -67,7 +67,7 @@ if "ruolo" in st.session_state:
 if "ruolo" not in st.session_state:
     st.title("🕵️ Mastermind Online 1-9")
     
-    # Le impostazioni si bloccano non appena entra il primo giocatore
+    # Blocco delle impostazioni all'ingresso del primo giocatore
     impostazioni_bloccate = game["p1_preso"] or game["p2_preso"]
     
     col_cfg, col_players = st.columns([1, 1], gap="large")
@@ -127,7 +127,6 @@ if "ruolo" not in st.session_state:
             disabled=impostazioni_bloccate
         )
         
-        # --- MODIFICA: AGGIUNTA DIALOGO RIPETIZIONE SINCRONIZZATO ---
         st.checkbox(
             "Permetti ripetizione di simboli/numeri uguali nella chiave",
             value=game["ripetizione_ammessa"],
@@ -139,23 +138,20 @@ if "ruolo" not in st.session_state:
     with col_players:
         st.subheader("👥 Stato Stanza")
         
-        # Controllo se la configurazione del range è valida
         config_valida = game["range_cifre"][0] < game["range_cifre"][1]
-        
-        # Controllo aggiuntivo: se la ripetizione è disattivata, il range deve contenere abbastanza elementi unici
         elementi_disponibili = game["range_cifre"][1] - game["range_cifre"][0] + 1
+        
         if not game["ripetizione_ammessa"] and game["n_cifre"] > elementi_disponibili:
             config_valida = False
             st.error(f"Errore: Senza ripetizioni, la lunghezza della sequenza ({game['n_cifre']}) non può superare il numero di elementi disponibili ({elementi_disponibili})!")
         elif not config_valida:
             st.error("Errore: Seleziona almeno due valori diversi nel range!")
 
-        # Visualizzazione dello stato dei giocatori
         st.write(f"Giocatore 1: {'🟢 Pronto' if game['p1_preso'] else '⚪ Libero'}")
         st.write(f"Giocatore 2: {'🟢 Pronto' if game['p2_preso'] else '⚪ Libero'}")
         st.write("")
         
-        # --- MODIFICA: UNICO PULSANTE INGRESSO DINAMICO ---
+        # Gestione ingresso sequenziale ad unico pulsante
         if not game["p1_preso"]:
             testo_bottone = "🚪 ENTRA COME GIOCATORE 1"
             ruolo_assegnato = "Giocatore 1"
@@ -215,33 +211,18 @@ if mia_chiave is None:
         st.warning("⚠️ Nota: La ripetizione degli stessi elementi NON è consentita!")
 
     if game["modalita"] == "Colori":
-        # Sostituisci il pezzo del tastierino nella fase di gioco attiva con questo:
-        for i, val in enumerate(range(low, high + 1)):
-            val_str = str(val)
-            # Se le ripetizioni non sono ammesse nella chiave, spesso non hanno senso nemmeno nel tentativo
-            bottone_disabilitato = (not game["ripetizione_ammessa"] and val_str in st.session_state.current_guess)
-            
-            if btn_cols[i].button(COLOR_MAP[val_str], key=f"btn_g_{val}", disabled=not mio_turno or bottone_disabilitato):
-                if not game["ripetizione_ammessa"] and val_str in st.session_state.current_guess:
-                    pass # Ignora il click fantasma ad alta velocità
-                elif len(st.session_state.current_guess) < n_cifre:
-                    st.session_state.current_guess += val_str
-                    st.rerun()
         cols = st.columns(high - low + 1)
         for i, val in enumerate(range(low, high + 1)):
             val_str = str(val)
-            
-            # 1. Blocco visivo (Streamlit standard)
             bottone_disabilitato = (not game["ripetizione_ammessa"] and val_str in st.session_state.temp_key)
             
             if cols[i].button(COLOR_MAP[val_str], key=f"key_set_{val}", disabled=bottone_disabilitato):
-                # 2. BLOCCO DI SICUREZZA ISTANTANEO (Anti-Click Veloce)
-                # Se l'utente ha cliccato due volte velocemente prima del refresh, questo IF blocca il secondo inserimento
+                # FIX DI SICUREZZA ANTI-CLICK RAPIDO (Intercettazione immediata lato server)
                 if not game["ripetizione_ammessa"] and val_str in st.session_state.temp_key:
-                    st.toast("⚠️ Non puoi ripetere questo colore!", icon="🚫")
+                    pass 
                 elif len(st.session_state.temp_key) < n_cifre:
                     st.session_state.temp_key += val_str
-                    st.rerun() # Forza il refresh immediato per ridisegnare i bottoni come disabilitati
+                    st.rerun()
         
         st.markdown(f"### Selezione: {' '.join([COLOR_MAP[c] for c in st.session_state.temp_key])}")
         
@@ -259,7 +240,6 @@ if mia_chiave is None:
             k = st.text_input(f"Digita {n_cifre} cifre (range {low}-{high}):", type="password", max_chars=n_cifre)
             if st.form_submit_button("Conferma") and len(k) == n_cifre:
                 if all(c.isdigit() and low <= int(c) <= high for c in k):
-                    # Controllo duplicati sui numeri se disabilitata la ripetizione
                     if not game["ripetizione_ammessa"] and len(set(k)) != len(k):
                         st.error("Errore: Ci sono cifre ripetute, ma le ripetizioni sono disattivate!")
                     else:
@@ -289,14 +269,23 @@ if game["p1_chiave"] and game["p2_chiave"]:
             st.write("Tastierino colori:")
             btn_cols = st.columns(high - low + 1)
             for i, val in enumerate(range(low, high + 1)):
-                if btn_cols[i].button(COLOR_MAP[str(val)], key=f"btn_g_{val}", disabled=not mio_turno):
-                    if len(st.session_state.current_guess) < n_cifre:
-                        st.session_state.current_guess += str(val)
+                val_str = str(val)
+                bottone_disabilitato = (not game["ripetizione_ammessa"] and val_str in st.session_state.current_guess)
+                
+                if btn_cols[i].button(COLOR_MAP[val_str], key=f"btn_g_{val}", disabled=not mio_turno or bottone_disabilitato):
+                    # FIX DI SICUREZZA ANTI-CLICK RAPIDO NEL TASTIERINO DI GIOCO
+                    if not game["ripetizione_ammessa"] and val_str in st.session_state.current_guess:
+                        pass
+                    elif len(st.session_state.current_guess) < n_cifre:
+                        st.session_state.current_guess += val_str
+                        st.rerun()
             
             st.markdown(f"### Tentativo: {' '.join([COLOR_MAP[c] for c in st.session_state.current_guess])}")
             
             c1, c2 = st.columns(2)
-            if c1.button("🗑️ Reset", disabled=not mio_turno): st.session_state.current_guess = ""
+            if c1.button("🗑️ Reset", disabled=not mio_turno): 
+                st.session_state.current_guess = ""
+                st.rerun()
             if c2.button("🚀 INVIA", use_container_width=True, disabled=not (mio_turno and len(st.session_state.current_guess) == n_cifre)):
                 target = game["p2_chiave"] if ruolo == "Giocatore 1" else game["p1_chiave"]
                 res = calcola_feedback(target, st.session_state.current_guess, n_cifre)
@@ -312,14 +301,17 @@ if game["p1_chiave"] and game["p2_chiave"]:
                 g = st.text_input(f"Inserisci {n_cifre} cifre:", max_chars=n_cifre, disabled=not mio_turno)
                 if st.form_submit_button("Invia") and len(g) == n_cifre:
                     if all(c.isdigit() and low <= int(c) <= high for c in g):
-                        target = game["p2_chiave"] if ruolo == "Giocatore 1" else game["p1_chiave"]
-                        res = calcola_feedback(target, g, n_cifre)
-                        if ruolo == "Giocatore 1":
-                            game["p1_mosse"].insert(0, (g, res)); game["turno"] = "Giocatore 2"
+                        if not game["ripetizione_ammessa"] and len(set(g)) != len(g):
+                            st.error("L'avversario ha impostato 'No Ripetizioni'. Inserisci cifre uniche!")
                         else:
-                            game["p2_mosse"].insert(0, (g, res)); game["turno"] = "Giocatore 1"
-                        if res == "✅" * n_cifre: game["vincitore"] = ruolo
-                        st.rerun()
+                            target = game["p2_chiave"] if ruolo == "Giocatore 1" else game["p1_chiave"]
+                            res = calcola_feedback(target, g, n_cifre)
+                            if ruolo == "Giocatore 1":
+                                game["p1_mosse"].insert(0, (g, res)); game["turno"] = "Giocatore 2"
+                            else:
+                                game["p2_mosse"].insert(0, (g, res)); game["turno"] = "Giocatore 1"
+                            if res == "✅" * n_cifre: game["vincitore"] = ruolo
+                            st.rerun()
                     else: st.error("Input non valido!")
 
     with col_stats:
