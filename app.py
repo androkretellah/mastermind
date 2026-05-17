@@ -65,28 +65,28 @@ if "ruolo" not in st.session_state:
     with col_cfg:
         st.subheader("⚙️ Regole della Sfida")
         
-        # --- FIX SINCRONIZZAZIONE: Callback e chiavi dinamiche per aggiornare lo stato globale ---
+        # --- CALLBACK CORRETTI ---
+        # Quando l'utente interagisce, il valore finisce in st.session_state[key]
+        # e noi lo copiamo nel dizionario globale `game`
         def on_modalita_change():
-            game["modalita"] = st.session_state.lobby_modalita
+            game["modalita"] = st.session_state[f"radio_mod_{game['modalita']}"]
         
         def on_cifre_change():
-            game["n_cifre"] = st.session_state.lobby_cifre
+            game["n_cifre"] = st.session_state[f"slider_cifre_{game['n_cifre']}"]
 
         def on_range_change():
-            game["range_cifre"] = st.session_state.lobby_range
+            game["range_cifre"] = st.session_state[f"slider_rng_{game['range_cifre'][0]}_{game['range_cifre'][1]}"]
 
         def on_tentativi_change():
-            game["max_tentativi"] = st.session_state.lobby_tentativi
+            game["max_tentativi"] = st.session_state[f"num_tent_{game['max_tentativi']}"]
 
-        # I componenti usano il valore di `game[...]` come indice/valore di partenza, 
-        # ma cambiano la loro `key` interna se il valore globale muta dall'esterno.
+        # Render dei componenti con chiavi dinamiche pulite
         st.radio(
             "Modalità:", 
             ["Colori", "Numeri"], 
             index=0 if game["modalita"] == "Colori" else 1,
-            key=f"modalita_{game['modalita']}", # Forza il refresh visivo se l'altro cambia
+            key=f"radio_mod_{game['modalita']}", 
             on_change=on_modalita_change,
-            text_input_with_label="lobby_modalita" if False else "lobby_modalita", # Trucco per assegnare il valore a session_state
             disabled=impostazioni_bloccate
         )
         
@@ -94,9 +94,8 @@ if "ruolo" not in st.session_state:
             "Lunghezza sequenza:", 
             3, 8, 
             value=game["n_cifre"],
-            key=f"cifre_{game['n_cifre']}",
+            key=f"slider_cifre_{game['n_cifre']}",
             on_change=on_cifre_change,
-            key_to_save="lobby_cifre" if False else "lobby_cifre",
             disabled=impostazioni_bloccate
         )
         
@@ -105,9 +104,8 @@ if "ruolo" not in st.session_state:
             "Seleziona Min e Max:",
             options=list(range(1, 10)),
             value=game["range_cifre"],
-            key=f"range_{game['range_cifre'][0]}_{game['range_cifre'][1]}",
+            key=f"slider_rng_{game['range_cifre'][0]}_{game['range_cifre'][1]}",
             on_change=on_range_change,
-            key_to_save="lobby_range" if False else "lobby_range",
             disabled=impostazioni_bloccate
         )
         
@@ -115,9 +113,8 @@ if "ruolo" not in st.session_state:
             "Max tentativi (0=∞):", 
             0, 50, 
             value=game["max_tentativi"],
-            key=f"tentativi_{game['max_tentativi']}",
+            key=f"num_tent_{game['max_tentativi']}",
             on_change=on_tentativi_change,
-            key_to_save="lobby_tentativi" if False else "lobby_tentativi",
             disabled=impostazioni_bloccate
         )
 
